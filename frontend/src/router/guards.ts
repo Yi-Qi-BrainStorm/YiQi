@@ -89,7 +89,20 @@ export const titleGuard = (to: RouteLocationNormalized) => {
   const defaultTitle = 'AI头脑风暴平台'
   const routeTitle = to.meta.title as string
   
-  document.title = routeTitle ? `${routeTitle} - ${defaultTitle}` : defaultTitle
+  // 动态标题处理
+  let finalTitle = routeTitle
+  
+  // 处理带参数的路由标题
+  if (routeTitle && to.params) {
+    // 替换标题中的参数占位符
+    Object.entries(to.params).forEach(([key, value]) => {
+      if (typeof value === 'string') {
+        finalTitle = finalTitle?.replace(`{${key}}`, value)
+      }
+    })
+  }
+  
+  document.title = finalTitle ? `${finalTitle} - ${defaultTitle}` : defaultTitle
 }
 
 /**

@@ -15,14 +15,7 @@
       </a-button>
 
       <!-- 面包屑导航 -->
-      <a-breadcrumb class="breadcrumb">
-        <a-breadcrumb-item v-for="item in breadcrumbItems" :key="item.path">
-          <router-link v-if="item.path && !item.disabled" :to="item.path">
-            {{ item.title }}
-          </router-link>
-          <span v-else>{{ item.title }}</span>
-        </a-breadcrumb-item>
-      </a-breadcrumb>
+      <Breadcrumb />
     </div>
 
     <!-- 右侧区域 -->
@@ -77,10 +70,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import { message } from 'ant-design-vue'
+import Breadcrumb from './Breadcrumb.vue'
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -96,19 +90,12 @@ interface Props {
   collapsed: boolean
 }
 
-interface BreadcrumbItem {
-  title: string
-  path?: string
-  disabled?: boolean
-}
-
 const props = defineProps<Props>()
 const emit = defineEmits<{
   toggleSidebar: []
 }>()
 
 const router = useRouter()
-const route = useRoute()
 const { user, logout } = useAuth()
 
 // 通知数量
@@ -117,26 +104,6 @@ const notificationCount = ref(3)
 // 用户信息
 const username = computed(() => user.value?.username || '用户')
 const userAvatar = computed(() => user.value?.avatar || '')
-
-// 面包屑导航数据
-const breadcrumbItems = computed<BreadcrumbItem[]>(() => {
-  const routeName = route.name as string
-  const routeMap: Record<string, BreadcrumbItem[]> = {
-    Dashboard: [
-      { title: '首页', path: '/dashboard' }
-    ],
-    AgentManagement: [
-      { title: '首页', path: '/dashboard' },
-      { title: '代理管理', disabled: true }
-    ],
-    BrainstormSession: [
-      { title: '首页', path: '/dashboard' },
-      { title: '头脑风暴', disabled: true }
-    ],
-  }
-
-  return routeMap[routeName] || [{ title: '首页', path: '/dashboard' }]
-})
 
 // 切换侧边栏
 const handleToggleSidebar = () => {
@@ -262,10 +229,6 @@ const handleUserMenuClick = async ({ key }: { key: string }) => {
 
   .header-left {
     gap: 12px;
-
-    .breadcrumb {
-      display: none;
-    }
   }
 
   .header-right {
