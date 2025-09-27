@@ -99,6 +99,60 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 处理代理未找到异常
+     */
+    @ExceptionHandler(AgentNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleAgentNotFoundException(AgentNotFoundException ex, WebRequest request) {
+        logger.error("代理未找到异常: {}", ex.getMessage(), ex);
+        
+        ErrorResponse errorResponse = new ErrorResponse(
+            false,
+            ex.getErrorCode(),
+            ex.getMessage(),
+            LocalDateTime.now(),
+            request.getDescription(false).replace("uri=", "")
+        );
+        
+        return new ResponseEntity<>(errorResponse, HttpStatus.NOT_FOUND);
+    }
+
+    /**
+     * 处理会话未找到异常
+     */
+    @ExceptionHandler(SessionNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleSessionNotFoundException(SessionNotFoundException ex, WebRequest request) {
+        logger.error("会话未找到异常: {}", ex.getMessage(), ex);
+        
+        ErrorResponse errorResponse = new ErrorResponse(
+            false,
+            ex.getErrorCode(),
+            ex.getMessage(),
+            LocalDateTime.now(),
+            request.getDescription(false).replace("uri=", "")
+        );
+        
+        return new ResponseEntity<>(errorResponse, HttpStatus.NOT_FOUND);
+    }
+
+    /**
+     * 处理阶段未找到异常
+     */
+    @ExceptionHandler(PhaseNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handlePhaseNotFoundException(PhaseNotFoundException ex, WebRequest request) {
+        logger.error("阶段未找到异常: {}", ex.getMessage(), ex);
+        
+        ErrorResponse errorResponse = new ErrorResponse(
+            false,
+            ex.getErrorCode(),
+            ex.getMessage(),
+            LocalDateTime.now(),
+            request.getDescription(false).replace("uri=", "")
+        );
+        
+        return new ResponseEntity<>(errorResponse, HttpStatus.NOT_FOUND);
+    }
+
+    /**
      * 处理参数验证异常
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -154,6 +208,9 @@ public class GlobalExceptionHandler {
             case "VALIDATION_ERROR":
                 return HttpStatus.BAD_REQUEST;
             case "USER_NOT_FOUND":
+            case "AGENT_NOT_FOUND":
+            case "SESSION_NOT_FOUND":
+            case "PHASE_NOT_FOUND":
                 return HttpStatus.NOT_FOUND;
             default:
                 return HttpStatus.INTERNAL_SERVER_ERROR;

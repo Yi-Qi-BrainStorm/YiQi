@@ -60,7 +60,7 @@ public class SecurityConfig {
             .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS).and()
             .authorizeRequests(authz -> authz
                 // 公开接口
-                .antMatchers("/auth/register", "/auth/login").permitAll()
+                .antMatchers("/users/register", "/users/login").permitAll()
                 // Swagger文档接口
                 .antMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
                 // 健康检查接口
