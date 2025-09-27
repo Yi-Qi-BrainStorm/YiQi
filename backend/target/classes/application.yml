@@ -1,0 +1,140 @@
+# 意启头脑风暴平台配置文件
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+spring:
+  application:
+    name: yiqi-brainstorm-platform
+
+  # 数据库配置
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/yiqi_brainstorm?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:mayuhao666.}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  # SQL初始化配置
+  sql:
+    init:
+      mode: never
+      schema-locations: classpath:schema.sql
+      data-locations: classpath:data.sql
+      continue-on-error: false
+
+  # JPA配置
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+        format_sql: true
+
+  # Jackson配置
+  jackson:
+    default-property-inclusion: non_null
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+
+# MyBatis Plus配置
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+  mapper-locations: classpath*:mapper/*.xml
+
+# 意启平台自定义配置
+yiqi:
+  # AI服务配置
+  ai:
+    qiniu:
+      api-key: ${QINIU_API_KEY:your-qiniu-api-key}
+      base-url: https://api.qiniu.com/ai/inference
+      timeout: 30000
+      retry-attempts: 3
+      models:
+        - qwen-plus
+        - qwen-turbo
+        - qwen-max
+    aliyun:
+      access-key-id: ${ALIYUN_ACCESS_KEY_ID:your-aliyun-access-key-id}
+      access-key-secret: ${ALIYUN_ACCESS_KEY_SECRET:your-aliyun-access-key-secret}
+      endpoint: https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis
+      timeout: 60000
+      models:
+        - qwen-vl-plus
+        - qwen-vl-max
+
+  # 线程池配置
+  thread-pool:
+    core-size: 10
+    max-size: 50
+    queue-capacity: 100
+    keep-alive-seconds: 60
+    thread-name-prefix: yiqi-async-
+
+  # JWT配置
+  jwt:
+    secret: ${JWT_SECRET:yiqi-brainstorm-platform-secret-key-2024}
+    expiration: 86400000 # 24小时
+    header: Authorization
+    prefix: Bearer
+
+  # 文件存储配置
+  file:
+    upload-path: ${FILE_UPLOAD_PATH:./uploads}
+    max-size: 10MB
+    allowed-types:
+      - pdf
+      - png
+      - jpg
+      - jpeg
+
+# 日志配置
+logging:
+  level:
+    com.yiqi: DEBUG
+    org.springframework.web: INFO
+    org.mybatis: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/yiqi-brainstorm.log
+    max-size: 100MB
+    max-history: 30
+
+# Swagger文档配置
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  packages-to-scan: com.yiqi.controller
+
+# 管理端点配置
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when_authorized
