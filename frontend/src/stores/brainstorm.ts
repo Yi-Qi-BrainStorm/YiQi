@@ -3,13 +3,15 @@ import { ref, computed } from 'vue';
 import { brainstormService } from '@/services/brainstormService';
 import type { 
   BrainstormSession, 
+  Phase,
   StageResult, 
   AISummary, 
   FinalReport,
   SessionStatus,
+  PhaseType,
   StageProgress
 } from '@/types/brainstorm';
-import type { AgentStatus, AgentResult } from '@/types/agent';
+import type { AgentRuntimeStatus, AgentResult } from '@/types/agent';
 import type { PaginatedResponse } from '@/types/api';
 
 /**
@@ -19,8 +21,8 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
   // 状态
   const currentSession = ref<BrainstormSession | null>(null);
   const sessions = ref<BrainstormSession[]>([]);
-  const agentStatuses = ref<Record<string, AgentStatus>>({});
-  const realTimeResults = ref<Record<string, AgentResult>>({});
+  const agentStatuses = ref<Record<number, AgentRuntimeStatus>>({});
+  const realTimeResults = ref<Record<number, AgentResult>>({});
   const loading = ref(false);
   const error = ref<string | null>(null);
   const pagination = ref({
@@ -40,34 +42,49 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
   const stageProgress = computed((): StageProgress | null => {
     if (!currentSession.value) return null;
     
+    const phaseTypes: PhaseType[] = ['IDEA_GENERATION', 'FEASIBILITY_ANALYSIS', 'CRITICISM_DISCUSSION'];
+    const phaseNames = ['创意生成', '技术可行性分析', '缺点讨论'];
+    
+    const currentPhaseIndex = currentSession.value.currentPhase 
+      ? phaseTypes.indexOf(currentSession.value.currentPhase)
+      : 0;
+    
     return {
-      current: currentSession.value.currentStage,
+      current: currentPhaseIndex + 1,
       total: 3,
-      stages: ['创意生成', '技术可行性分析', '缺点讨论'],
-      completed: currentSession.value.stageResults.map(result => !!result),
+      stages: phaseNames,
+      completed: currentSession.value.phases.map(phase => phase.status === 'COMPLETED'),
     };
   });
 
   const currentStageAgents = computed(() => {
     if (!currentSession.value) return [];
     
-    return currentSession.value.agentIds.map(agentId => ({
-      agentId,
-      status: agentStatuses.value[agentId] || 'idle',
-      result: realTimeResults.value[agentId],
+    return currentSession.value.agents.map(sessionAgent => ({
+      agentId: sessionAgent.agentId,
+      agent: sessionAgent.agent,
+      status: agentStatuses.value[sessionAgent.agentId] || 'idle',
+      result: realTimeResults.value[sessionAgent.agentId],
     }));
   });
 
   const isCurrentStageComplete = computed(() => {
     if (!currentSession.value) return false;
     
-    return currentSession.value.agentIds.every(agentId => 
-      agentStatuses.value[agentId] === 'completed'
+    return currentSession.value.agents.every(sessionAgent => 
+      agentStatuses.value[sessionAgent.agentId] === 'completed'
     );
   });
 
   const canProceedToNextStage = computed(() => {
-    return isCurrentStageComplete.value && currentSession.value?.currentStage < 3;
+    if (!currentSession.value) return false;
+    
+    const phaseTypes: PhaseType[] = ['IDEA_GENERATION', 'FEASIBILITY_ANALYSIS', 'CRITICISM_DISCUSSION'];
+    const currentPhaseIndex = currentSession.value.currentPhase 
+      ? phaseTypes.indexOf(currentSession.value.currentPhase)
+      : -1;
+    
+    return isCurrentStageComplete.value && currentPhaseIndex < 2;
   });
 
   const isSessionComplete = computed(() => {
@@ -81,7 +98,8 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
   const fetchSessions = async (params?: {
     page?: number;
     limit?: number;
-    status?: string;
+    status?: SessionStatus;
+    currentPhase?: PhaseType;
     search?: string;
   }): Promise<void> => {
     loading.value = true;
@@ -102,12 +120,14 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
   /**
    * 创建新会话
    */
-  const createSession = async (topic: string, agentIds: string[]): Promise<BrainstormSession> => {
+  const createSession = async (title: string, topic: string, agentIds: number[], description?: string): Promise<BrainstormSession> => {
     loading.value = true;
     error.value = null;
     
     try {
       const session = await brainstormService.createSession({
+        title,
+        description,
         topic,
         agentIds,
       });
@@ -115,8 +135,8 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
       currentSession.value = session;
       
       // 初始化代理状态
-      agentIds.forEach(agentId => {
-        agentStatuses.value[agentId] = 'idle';
+      session.agents.forEach(sessionAgent => {
+        agentStatuses.value[sessionAgent.agentId] = 'idle';
       });
       
       // 清空之前的结果
@@ -134,7 +154,7 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
   /**
    * 加载会话
    */
-  const loadSession = async (sessionId: string): Promise<void> => {
+  const loadSession = async (sessionId: number): Promise<void> => {
     loading.value = true;
     error.value = null;
     
@@ -143,17 +163,27 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
       currentSession.value = session;
       
       // 初始化代理状态
-      session.agentIds.forEach(agentId => {
-        agentStatuses.value[agentId] = 'idle';
+      session.agents.forEach(sessionAgent => {
+        agentStatuses.value[sessionAgent.agentId] = 'idle';
       });
       
-      // 如果会话已有结果，加载到实时结果中
-      if (session.stageResults.length > 0) {
-        const currentStageResult = session.stageResults[session.currentStage - 1];
-        if (currentStageResult) {
-          currentStageResult.agentResults.forEach(result => {
-            realTimeResults.value[result.agentId] = result;
-            agentStatuses.value[result.agentId] = 'completed';
+      // 如果会话已有阶段结果，加载到实时结果中
+      if (session.phases.length > 0) {
+        const currentPhase = session.phases.find(phase => phase.phaseType === session.currentPhase);
+        if (currentPhase && currentPhase.responses.length > 0) {
+          currentPhase.responses.forEach(response => {
+            if (response.status === 'COMPLETED') {
+              const result: AgentResult = {
+                agentId: response.agentId,
+                agentName: session.agents.find(a => a.agentId === response.agentId)?.agent.name || '',
+                agentRole: session.agents.find(a => a.agentId === response.agentId)?.agent.roleType || '',
+                content: response.content,
+                processingTime: response.processingTimeMs || 0,
+                createdAt: response.createdAt,
+              };
+              realTimeResults.value[response.agentId] = result;
+              agentStatuses.value[response.agentId] = 'completed';
+            }
           });
         }
       }
@@ -168,7 +198,7 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
   /**
    * 开始会话
    */
-  const startSession = async (sessionId: string): Promise<void> => {
+  const startSession = async (sessionId: number): Promise<void> => {
     if (!currentSession.value || currentSession.value.id !== sessionId) {
       await loadSession(sessionId);
     }
@@ -177,11 +207,11 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
       await brainstormService.startSession(sessionId);
       
       if (currentSession.value) {
-        currentSession.value.status = 'active';
+        currentSession.value.status = 'IN_PROGRESS';
         
         // 设置所有代理为思考状态
-        currentSession.value.agentIds.forEach(agentId => {
-          agentStatuses.value[agentId] = 'thinking';
+        currentSession.value.agents.forEach(sessionAgent => {
+          agentStatuses.value[sessionAgent.agentId] = 'thinking';
         });
       }
     } catch (err: any) {
@@ -193,12 +223,12 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
   /**
    * 暂停会话
    */
-  const pauseSession = async (sessionId: string): Promise<void> => {
+  const pauseSession = async (sessionId: number): Promise<void> => {
     try {
       await brainstormService.pauseSession(sessionId);
       
       if (currentSession.value && currentSession.value.id === sessionId) {
-        currentSession.value.status = 'paused';
+        currentSession.value.status = 'PAUSED';
       }
     } catch (err: any) {
       error.value = err.message || '暂停会话失败';
@@ -209,12 +239,12 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
   /**
    * 恢复会话
    */
-  const resumeSession = async (sessionId: string): Promise<void> => {
+  const resumeSession = async (sessionId: number): Promise<void> => {
     try {
       await brainstormService.resumeSession(sessionId);
       
       if (currentSession.value && currentSession.value.id === sessionId) {
-        currentSession.value.status = 'active';
+        currentSession.value.status = 'IN_PROGRESS';
       }
     } catch (err: any) {
       error.value = err.message || '恢复会话失败';
@@ -225,12 +255,12 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
   /**
    * 停止会话
    */
-  const stopSession = async (sessionId: string): Promise<void> => {
+  const stopSession = async (sessionId: number): Promise<void> => {
     try {
       await brainstormService.stopSession(sessionId);
       
       if (currentSession.value && currentSession.value.id === sessionId) {
-        currentSession.value.status = 'cancelled';
+        currentSession.value.status = 'CANCELLED';
       }
     } catch (err: any) {
       error.value = err.message || '停止会话失败';
@@ -247,14 +277,21 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
     }
     
     try {
-      await brainstormService.proceedToNextStage(currentSession.value.id);
+      const phaseTypes: PhaseType[] = ['IDEA_GENERATION', 'FEASIBILITY_ANALYSIS', 'CRITICISM_DISCUSSION'];
+      const currentPhaseIndex = currentSession.value.currentPhase 
+        ? phaseTypes.indexOf(currentSession.value.currentPhase)
+        : -1;
+      
+      const nextPhaseType = phaseTypes[currentPhaseIndex + 1];
+      
+      await brainstormService.proceedToNextPhase(currentSession.value.id, nextPhaseType);
       
       // 更新当前阶段
-      currentSession.value.currentStage += 1;
+      currentSession.value.currentPhase = nextPhaseType;
       
       // 重置代理状态为思考中
-      currentSession.value.agentIds.forEach(agentId => {
-        agentStatuses.value[agentId] = 'thinking';
+      currentSession.value.agents.forEach(sessionAgent => {
+        agentStatuses.value[sessionAgent.agentId] = 'thinking';
       });
       
       // 清空当前阶段的实时结果
@@ -277,8 +314,8 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
       await brainstormService.restartCurrentStage(currentSession.value.id);
       
       // 重置代理状态为思考中
-      currentSession.value.agentIds.forEach(agentId => {
-        agentStatuses.value[agentId] = 'thinking';
+      currentSession.value.agents.forEach(sessionAgent => {
+        agentStatuses.value[sessionAgent.agentId] = 'thinking';
       });
       
       // 清空当前阶段的实时结果
@@ -292,14 +329,14 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
   /**
    * 更新代理状态
    */
-  const updateAgentStatus = (agentId: string, status: AgentStatus): void => {
+  const updateAgentStatus = (agentId: number, status: AgentRuntimeStatus): void => {
     agentStatuses.value[agentId] = status;
   };
 
   /**
    * 设置代理结果
    */
-  const setAgentResult = (agentId: string, result: AgentResult): void => {
+  const setAgentResult = (agentId: number, result: AgentResult): void => {
     realTimeResults.value[agentId] = result;
     agentStatuses.value[agentId] = 'completed';
   };
@@ -307,23 +344,16 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
   /**
    * 设置阶段总结
    */
-  const setStageSummary = (stage: number, summary: AISummary): void => {
+  const setStageSummary = (phaseType: PhaseType, summary: AISummary): void => {
     if (!currentSession.value) return;
     
-    const stageResult: StageResult = {
-      stage,
-      stageName: ['创意生成', '技术可行性分析', '缺点讨论'][stage - 1],
-      agentResults: Object.values(realTimeResults.value),
-      aiSummary: summary,
-      completedAt: new Date().toISOString(),
-    };
-    
-    // 确保stageResults数组有足够的长度
-    while (currentSession.value.stageResults.length < stage) {
-      currentSession.value.stageResults.push({} as StageResult);
+    // 找到对应的阶段并更新总结
+    const phase = currentSession.value.phases.find(p => p.phaseType === phaseType);
+    if (phase) {
+      phase.summary = JSON.stringify(summary);
+      phase.status = 'COMPLETED';
+      phase.completedAt = new Date().toISOString();
     }
-    
-    currentSession.value.stageResults[stage - 1] = stageResult;
   };
 
   /**
@@ -331,22 +361,32 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
    */
   const setFinalReport = (report: FinalReport): void => {
     if (currentSession.value) {
-      currentSession.value.finalReport = report;
-      currentSession.value.status = 'completed';
+      currentSession.value.report = {
+        id: 0, // 临时ID，实际应该从后端获取
+        sessionId: currentSession.value.id,
+        title: `${currentSession.value.title} - 最终报告`,
+        content: JSON.stringify(report),
+        status: 'GENERATED',
+        filePath: null,
+        generatedAt: new Date().toISOString(),
+      };
+      currentSession.value.status = 'COMPLETED';
     }
   };
 
   /**
    * 获取最终报告
    */
-  const fetchFinalReport = async (sessionId: string): Promise<FinalReport> => {
+  const fetchFinalReport = async (sessionId: number): Promise<FinalReport> => {
     try {
-      const report = await brainstormService.getFinalReport(sessionId);
+      const reportData = await brainstormService.getFinalReport(sessionId);
       
       if (currentSession.value && currentSession.value.id === sessionId) {
-        currentSession.value.finalReport = report;
+        currentSession.value.report = reportData;
       }
       
+      // 解析报告内容
+      const report: FinalReport = JSON.parse(reportData.content);
       return report;
     } catch (err: any) {
       error.value = err.message || '获取最终报告失败';
@@ -357,7 +397,7 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
   /**
    * 删除会话
    */
-  const deleteSession = async (sessionId: string): Promise<void> => {
+  const deleteSession = async (sessionId: number): Promise<void> => {
     try {
       await brainstormService.deleteSession(sessionId);
       
@@ -377,9 +417,9 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
   /**
    * 复制会话
    */
-  const duplicateSession = async (sessionId: string, newTopic?: string): Promise<BrainstormSession> => {
+  const duplicateSession = async (sessionId: number, newTitle?: string): Promise<BrainstormSession> => {
     try {
-      const duplicatedSession = await brainstormService.duplicateSession(sessionId, newTopic);
+      const duplicatedSession = await brainstormService.duplicateSession(sessionId, newTitle);
       sessions.value.unshift(duplicatedSession); // 添加到列表开头
       return duplicatedSession;
     } catch (err: any) {

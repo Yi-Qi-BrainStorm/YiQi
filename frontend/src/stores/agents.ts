@@ -4,7 +4,8 @@ import { agentService } from '@/services/agentService';
 import type { 
   Agent, 
   AgentFormData, 
-  AIModel 
+  AIModel,
+  AgentStatus 
 } from '@/types/agent';
 import type { PaginatedResponse } from '@/types/api';
 
@@ -14,7 +15,7 @@ import type { PaginatedResponse } from '@/types/api';
 export const useAgentStore = defineStore('agents', () => {
   // 状态
   const agents = ref<Agent[]>([]);
-  const selectedAgentIds = ref<string[]>([]);
+  const selectedAgentIds = ref<number[]>([]);
   const availableModels = ref<AIModel[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
@@ -45,7 +46,8 @@ export const useAgentStore = defineStore('agents', () => {
     page?: number;
     limit?: number;
     search?: string;
-    role?: string;
+    roleType?: string;
+    status?: AgentStatus;
   }): Promise<void> => {
     loading.value = true;
     error.value = null;
@@ -65,7 +67,7 @@ export const useAgentStore = defineStore('agents', () => {
   /**
    * 获取单个代理详情
    */
-  const fetchAgent = async (id: string): Promise<Agent> => {
+  const fetchAgent = async (id: number): Promise<Agent> => {
     try {
       const agent = await agentService.getAgent(id);
       
@@ -104,7 +106,7 @@ export const useAgentStore = defineStore('agents', () => {
   /**
    * 更新代理
    */
-  const updateAgent = async (id: string, agentData: Partial<AgentFormData>): Promise<Agent> => {
+  const updateAgent = async (id: number, agentData: Partial<AgentFormData>): Promise<Agent> => {
     loading.value = true;
     error.value = null;
     
@@ -129,7 +131,7 @@ export const useAgentStore = defineStore('agents', () => {
   /**
    * 删除代理
    */
-  const deleteAgent = async (id: string): Promise<void> => {
+  const deleteAgent = async (id: number): Promise<void> => {
     loading.value = true;
     error.value = null;
     
@@ -152,7 +154,7 @@ export const useAgentStore = defineStore('agents', () => {
   /**
    * 批量删除代理
    */
-  const deleteAgents = async (ids: string[]): Promise<void> => {
+  const deleteAgents = async (ids: number[]): Promise<void> => {
     loading.value = true;
     error.value = null;
     
@@ -175,7 +177,7 @@ export const useAgentStore = defineStore('agents', () => {
   /**
    * 复制代理
    */
-  const duplicateAgent = async (id: string, name?: string): Promise<Agent> => {
+  const duplicateAgent = async (id: number, name?: string): Promise<Agent> => {
     loading.value = true;
     error.value = null;
     
@@ -194,7 +196,7 @@ export const useAgentStore = defineStore('agents', () => {
   /**
    * 选择代理
    */
-  const selectAgent = (agentId: string): void => {
+  const selectAgent = (agentId: number): void => {
     if (!selectedAgentIds.value.includes(agentId)) {
       selectedAgentIds.value.push(agentId);
     }
@@ -203,14 +205,14 @@ export const useAgentStore = defineStore('agents', () => {
   /**
    * 取消选择代理
    */
-  const deselectAgent = (agentId: string): void => {
+  const deselectAgent = (agentId: number): void => {
     selectedAgentIds.value = selectedAgentIds.value.filter(id => id !== agentId);
   };
 
   /**
    * 切换代理选择状态
    */
-  const toggleAgentSelection = (agentId: string): void => {
+  const toggleAgentSelection = (agentId: number): void => {
     if (selectedAgentIds.value.includes(agentId)) {
       deselectAgent(agentId);
     } else {
@@ -235,7 +237,7 @@ export const useAgentStore = defineStore('agents', () => {
   /**
    * 批量选择代理
    */
-  const selectAgents = (agentIds: string[]): void => {
+  const selectAgents = (agentIds: number[]): void => {
     // 合并选择，去重
     const newSelection = [...new Set([...selectedAgentIds.value, ...agentIds])];
     selectedAgentIds.value = newSelection;
@@ -257,7 +259,7 @@ export const useAgentStore = defineStore('agents', () => {
   /**
    * 测试代理配置
    */
-  const testAgent = async (id: string, testPrompt: string): Promise<{
+  const testAgent = async (id: number, testPrompt: string): Promise<{
     success: boolean;
     response?: string;
     error?: string;

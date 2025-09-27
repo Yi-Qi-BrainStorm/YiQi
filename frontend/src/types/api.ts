@@ -65,31 +65,35 @@ export interface UpdateUserRequest {
 // 代理API类型
 export interface CreateAgentRequest {
   name: string;
-  role: string;
+  roleType: string;
   systemPrompt: string;
-  modelType: import('./agent').AIModelType;
-  modelConfig: import('./agent').ModelConfig;
+  aiModel: import('./agent').AIModelType;
 }
 
 export interface UpdateAgentRequest extends Partial<CreateAgentRequest> {}
 
 export interface GetAgentsRequest extends PaginationParams, SearchParams {
-  modelType?: import('./agent').AIModelType;
-  userId?: string;
+  aiModel?: import('./agent').AIModelType;
+  roleType?: string;
+  status?: import('./agent').AgentStatus;
 }
 
 // 头脑风暴API类型
 export interface CreateBrainstormRequest {
+  title: string;
+  description?: string;
   topic: string;
-  agentIds: string[];
+  agentIds: number[];
 }
 
 export interface GetBrainstormSessionsRequest extends PaginationParams, SearchParams {
   status?: import('./brainstorm').SessionStatus;
-  userId?: string;
+  currentPhase?: import('./brainstorm').PhaseType;
 }
 
 export interface UpdateSessionRequest {
+  title?: string;
+  description?: string;
   topic?: string;
   status?: import('./brainstorm').SessionStatus;
 }
@@ -119,7 +123,7 @@ export interface FileUploadResponse {
 
 // 导出相关类型
 export interface ExportRequest {
-  sessionId: string;
+  sessionId: number;
   format: 'pdf' | 'docx' | 'html' | 'json';
   options?: {
     includeAgentDetails?: boolean;
@@ -140,7 +144,7 @@ export interface SessionStats {
   completedSessions: number;
   averageCompletionTime: number;
   mostUsedAgents: {
-    agentId: string;
+    agentId: number;
     agentName: string;
     usageCount: number;
   }[];
@@ -151,12 +155,11 @@ export interface SessionStats {
 }
 
 export interface AgentPerformance {
-  agentId: string;
+  agentId: number;
   agentName: string;
   totalUsage: number;
   averageProcessingTime: number;
   successRate: number;
-  averageConfidence: number;
 }
 
 // 系统配置类型
