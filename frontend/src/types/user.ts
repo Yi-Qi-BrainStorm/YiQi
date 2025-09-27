@@ -1,13 +1,10 @@
-// 用户相关类型定义
+// 用户相关类型定义 (基于后端DTO结构)
 
 export interface User {
   id: number;
   username: string;
-  email: string;
   createdAt: string;
   lastLoginAt: string | null;
-  failedLoginAttempts: number;
-  lockedUntil: string | null;
 }
 
 export interface LoginCredentials {
@@ -17,11 +14,13 @@ export interface LoginCredentials {
 
 export interface RegisterData {
   username: string;
-  email: string;
   password: string;
+  // 前端可能需要的额外字段
+  confirmPassword?: string;
+  email?: string; // 可选，后端暂不支持
 }
 
-// Backend API compatible register data (without email for now)
+// Backend API compatible register data
 export interface BackendRegisterData {
   username: string;
   password: string;
@@ -33,15 +32,12 @@ export interface AuthResponse {
   user: User;
 }
 
-// 注册响应类型（注册成功后直接返回用户信息，不包含token）
+// 注册响应类型（基于后端UserResponse）
 export interface RegisterResponse {
   id: number;
   username: string;
-  email: string;
   createdAt: string;
   lastLoginAt: string | null;
-  failedLoginAttempts: number;
-  lockedUntil: string | null;
 }
 
 // 扩展的用户配置文件（可选功能）

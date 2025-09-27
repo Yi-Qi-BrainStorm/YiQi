@@ -78,6 +78,8 @@
             立即注册
           </router-link>
         </div>
+        
+
       </a-form>
     </div>
   </div>
@@ -86,6 +88,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { message } from 'ant-design-vue';
 import { UserOutlined, LockOutlined } from '@ant-design/icons-vue';
 import { useAuth } from '@/composables/useAuth';
 import { useLoading } from '@/composables/useLoading';
@@ -98,6 +101,8 @@ const router = useRouter();
 
 // 认证相关
 const { login, isAuthenticated, requireGuest } = useAuth();
+
+
 
 // 加载状态管理
 const { isLoading: loading, withLoading } = useLoading('login-form');
@@ -169,6 +174,8 @@ const handleSubmitFailed = (errorInfo: any) => {
     message.error(`${firstError.errors[0]}`);
   }
 };
+
+
 
 // 组件挂载时检查是否已登录
 onMounted(async () => {
@@ -279,6 +286,8 @@ onMounted(async () => {
     }
   }
 }
+
+
 
 // 响应式设计
 @media (max-width: 480px) {

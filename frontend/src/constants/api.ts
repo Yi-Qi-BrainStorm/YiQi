@@ -1,21 +1,27 @@
 // API端点常量定义
 
 // 基础API配置
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api';
 export const API_VERSION = 'v1';
 export const API_TIMEOUT = 30000; // 30秒
 
-// 认证相关端点
+// 健康检查端点
+export const HEALTH_ENDPOINTS = {
+  HEALTH: '/actuator/health',
+  INFO: '/actuator/info',
+  METRICS: '/actuator/metrics'
+} as const;
+
+// 认证相关端点 (基于后端实际实现)
 export const AUTH_ENDPOINTS = {
-  LOGIN: '/auth/login',
-  REGISTER: '/auth/register',
-  LOGOUT: '/auth/logout',
-  REFRESH: '/auth/refresh',
-  PROFILE: '/auth/profile',
-  UPDATE_PROFILE: '/auth/profile',
-  CHANGE_PASSWORD: '/auth/change-password',
-  FORGOT_PASSWORD: '/auth/forgot-password',
-  RESET_PASSWORD: '/auth/reset-password'
+  LOGIN: '/users/login',
+  REGISTER: '/users/register',
+  LOGOUT: '/users/logout',
+  PROFILE: '/users/me',
+  UPDATE_PROFILE: '/users/me',
+  CHANGE_PASSWORD: '/users/change-password',
+  FORGOT_PASSWORD: '/users/forgot-password',
+  RESET_PASSWORD: '/users/reset-password'
 } as const;
 
 // 用户相关端点

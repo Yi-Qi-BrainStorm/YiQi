@@ -212,9 +212,10 @@ const importFileInput = ref<HTMLInputElement>();
 
 // 统计信息
 const stats = computed(() => {
-  const totalAgents = agents.value.length;
-  const activeAgents = agents.value.filter(agent => agent.status === 'ACTIVE').length;
-  const uniqueRoles = new Set(agents.value.map(agent => agent.roleType)).size;
+  const agentList = agents.value || [];
+  const totalAgents = agentList.length;
+  const activeAgents = agentList.filter(agent => agent.status === 'ACTIVE').length;
+  const uniqueRoles = new Set(agentList.map(agent => agent.roleType)).size;
   
   return {
     totalAgents,

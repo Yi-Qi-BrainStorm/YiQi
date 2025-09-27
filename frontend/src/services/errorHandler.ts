@@ -1,5 +1,5 @@
 import { AxiosError } from 'axios';
-import { ElMessage, ElNotification } from 'element-plus';
+import { message, notification } from 'ant-design-vue';
 
 export interface AppError {
   code: string;
@@ -255,31 +255,19 @@ export class GlobalErrorHandler {
    * 向用户显示错误
    */
   private static showErrorToUser(error: AppError, context?: ErrorContext) {
-    const message = ApiErrorHandler.formatErrorMessage(error);
+    const errorMessage = ApiErrorHandler.formatErrorMessage(error);
 
     switch (error.code) {
       case 'NETWORK_ERROR':
-        ElMessage({
-          type: 'error',
-          message: '网络连接失败，请检查网络设置',
-          duration: 5000,
-        });
+        message.error('网络连接失败，请检查网络设置', 5);
         break;
 
       case 'TIMEOUT':
-        ElMessage({
-          type: 'warning',
-          message: '请求超时，请稍后重试',
-          duration: 3000,
-        });
+        message.warning('请求超时，请稍后重试', 3);
         break;
 
       case 'VALIDATION_ERROR':
-        ElMessage({
-          type: 'warning',
-          message,
-          duration: 4000,
-        });
+        message.warning(errorMessage, 4);
         break;
 
       case 'UNAUTHORIZED':
@@ -287,54 +275,36 @@ export class GlobalErrorHandler {
         break;
 
       case 'FORBIDDEN':
-        ElMessage({
-          type: 'error',
-          message: '权限不足，无法执行此操作',
-          duration: 4000,
-        });
+        message.error('权限不足，无法执行此操作', 4);
         break;
 
       case 'NOT_FOUND':
-        ElMessage({
-          type: 'warning',
-          message: '请求的资源不存在',
-          duration: 3000,
-        });
+        message.warning('请求的资源不存在', 3);
         break;
 
       case 'SERVER_ERROR':
       case 'SERVICE_UNAVAILABLE':
-        ElNotification({
-          title: '系统错误',
-          message: '服务暂时不可用，请稍后重试',
-          type: 'error',
-          duration: 6000,
+        notification.error({
+          message: '系统错误',
+          description: '服务暂时不可用，请稍后重试',
+          duration: 6,
         });
         break;
 
       case 'RATE_LIMIT':
-        ElMessage({
-          type: 'warning',
-          message: '操作过于频繁，请稍后重试',
-          duration: 4000,
-        });
+        message.warning('操作过于频繁，请稍后重试', 4);
         break;
 
       default:
         // 对于未知错误，显示通用消息
         if (context?.component) {
-          ElNotification({
-            title: '操作失败',
-            message: message || '操作失败，请重试',
-            type: 'error',
-            duration: 5000,
+          notification.error({
+            message: '操作失败',
+            description: errorMessage || '操作失败，请重试',
+            duration: 5,
           });
         } else {
-          ElMessage({
-            type: 'error',
-            message: message || '发生未知错误',
-            duration: 4000,
-          });
+          message.error(errorMessage || '发生未知错误', 4);
         }
     }
   }
@@ -343,10 +313,9 @@ export class GlobalErrorHandler {
    * 处理认证失效
    */
   private static handleAuthExpired() {
-    ElNotification({
-      title: '登录已过期',
-      message: '您的登录已过期，请重新登录',
-      type: 'warning',
+    notification.warning({
+      message: '登录已过期',
+      description: '您的登录已过期，请重新登录',
       duration: 0, // 不自动关闭
       onClick: () => {
         window.location.href = '/login';
@@ -363,11 +332,7 @@ export class GlobalErrorHandler {
    * 显示离线消息
    */
   private static showOfflineMessage() {
-    ElMessage({
-      type: 'warning',
-      message: '网络连接已断开，操作将在网络恢复后重试',
-      duration: 5000,
-    });
+    message.warning('网络连接已断开，操作将在网络恢复后重试', 5);
   }
 
   /**
@@ -385,11 +350,7 @@ export class GlobalErrorHandler {
    */
   private static processOfflineErrors() {
     if (this.errorQueue.length > 0) {
-      ElMessage({
-        type: 'success',
-        message: '网络已恢复连接',
-        duration: 3000,
-      });
+      message.success('网络已恢复连接', 3);
 
       // 清空队列
       this.errorQueue = [];

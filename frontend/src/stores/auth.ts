@@ -46,9 +46,11 @@ export const useAuthStore = defineStore('auth', () => {
       // 持久化token
       localStorage.setItem('auth_token', response.accessToken);
       
-      // 开始监控认证状态
-      const { AuthMonitor } = await import('@/utils/authUtils');
-      AuthMonitor.getInstance().startMonitoring();
+      // 延迟开始监控认证状态，避免立即检查导致登出
+      setTimeout(async () => {
+        const { AuthMonitor } = await import('@/utils/authUtils');
+        AuthMonitor.getInstance().startMonitoring();
+      }, 3000);
       
       // 显示成功提示
       NotificationService.success(`欢迎回来，${response.user.username}！`);
@@ -142,8 +144,11 @@ export const useAuthStore = defineStore('auth', () => {
       user.value = userData;
       return true;
     } catch (err) {
-      // token无效，清除认证状态
-      await logout();
+      // token无效，直接清除本地状态，不调用logout避免循环
+      console.warn('Token验证失败，清除本地认证状态:', err);
+      user.value = null;
+      token.value = null;
+      localStorage.removeItem('auth_token');
       return false;
     } finally {
       loading.value = false;
@@ -168,11 +173,24 @@ export const useAuthStore = defineStore('auth', () => {
   };
 
   /**
+   * 清除所有认证状态
+   */
+  const clearAuth = (): void => {
+    user.value = null;
+    token.value = null;
+    error.value = null;
+    localStorage.removeItem('auth_token');
+  };
+
+  /**
    * 初始化认证状态
    */
   const initialize = async (): Promise<void> => {
-    if (token.value) {
-      await checkAuth();
+    // 简化初始化，只检查token是否存在
+    const storedToken = localStorage.getItem('auth_token');
+    if (storedToken) {
+      token.value = storedToken;
+      // 不在初始化时验证token，让路由守卫处理
     }
   };
 
@@ -194,6 +212,7 @@ export const useAuthStore = defineStore('auth', () => {
     checkAuth,
     refreshToken,
     clearError,
+    clearAuth,
     initialize,
   };
 });
