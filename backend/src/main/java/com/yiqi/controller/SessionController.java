@@ -5,6 +5,7 @@ import com.yiqi.dto.SessionResponse;
 import com.yiqi.dto.SessionStatusResponse;
 import com.yiqi.dto.StartSessionRequest;
 import com.yiqi.dto.SubmitPhaseForApprovalRequest;
+import com.yiqi.entity.AgentResponse;
 import com.yiqi.entity.Phase;
 import com.yiqi.entity.User;
 import com.yiqi.enums.PhaseType;
@@ -326,6 +327,116 @@ public class SessionController {
         
         List<Phase> phases = phaseService.getSessionPhases(sessionId);
         return ResponseEntity.ok(phases);
+    }
+
+    /**
+     * 执行创意生成阶段
+     * 
+     * @param sessionId 会话ID
+     * @param request 启动会话请求（包含主题）
+     * @param authentication 认证信息
+     * @return 成功响应
+     */
+    @PostMapping("/{sessionId}/phases/IDEA_GENERATION/execute")
+    @Operation(summary = "执行创意生成阶段", description = "启动创意生成阶段的AI代理推理过程")
+    public ResponseEntity<Void> executeIdeaGenerationPhase(
+            @Parameter(description = "会话ID") @PathVariable Long sessionId,
+            @Valid @RequestBody StartSessionRequest request,
+            Authentication authentication) {
+        
+        // 验证会话所有权
+        validateSessionOwnership(sessionId, authentication);
+        
+        phaseService.executeIdeaGenerationPhase(sessionId, request.getTopic());
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * 执行技术可行性分析阶段
+     * 
+     * @param sessionId 会话ID
+     * @param request 启动会话请求（包含主题）
+     * @param authentication 认证信息
+     * @return 成功响应
+     */
+    @PostMapping("/{sessionId}/phases/FEASIBILITY_ANALYSIS/execute")
+    @Operation(summary = "执行技术可行性分析阶段", description = "启动技术可行性分析阶段的AI代理推理过程")
+    public ResponseEntity<Void> executeFeasibilityAnalysisPhase(
+            @Parameter(description = "会话ID") @PathVariable Long sessionId,
+            @Valid @RequestBody StartSessionRequest request,
+            Authentication authentication) {
+        
+        // 验证会话所有权
+        validateSessionOwnership(sessionId, authentication);
+        
+        phaseService.executeFeasibilityAnalysisPhase(sessionId, request.getTopic());
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * 执行缺点讨论阶段
+     * 
+     * @param sessionId 会话ID
+     * @param request 启动会话请求（包含主题）
+     * @param authentication 认证信息
+     * @return 成功响应
+     */
+    @PostMapping("/{sessionId}/phases/DRAWBACK_DISCUSSION/execute")
+    @Operation(summary = "执行缺点讨论阶段", description = "启动缺点讨论阶段的AI代理推理过程")
+    public ResponseEntity<Void> executeDrawbackDiscussionPhase(
+            @Parameter(description = "会话ID") @PathVariable Long sessionId,
+            @Valid @RequestBody StartSessionRequest request,
+            Authentication authentication) {
+        
+        // 验证会话所有权
+        validateSessionOwnership(sessionId, authentication);
+        
+        phaseService.executeDrawbackDiscussionPhase(sessionId, request.getTopic());
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * 获取阶段的代理响应结果
+     * 
+     * @param sessionId 会话ID
+     * @param phaseType 阶段类型
+     * @param authentication 认证信息
+     * @return 代理响应列表
+     */
+    @GetMapping("/{sessionId}/phases/{phaseType}/responses")
+    @Operation(summary = "获取阶段代理响应", description = "获取指定阶段的所有代理响应结果")
+    public ResponseEntity<List<AgentResponse>> getPhaseResponses(
+            @Parameter(description = "会话ID") @PathVariable Long sessionId,
+            @Parameter(description = "阶段类型") @PathVariable PhaseType phaseType,
+            Authentication authentication) {
+        
+        // 验证会话所有权
+        validateSessionOwnership(sessionId, authentication);
+        
+        List<AgentResponse> responses = phaseService.getPhaseResponses(sessionId, phaseType);
+        return ResponseEntity.ok(responses);
+    }
+
+    /**
+     * 获取阶段的成功响应结果
+     * 
+     * @param sessionId 会话ID
+     * @param phaseType 阶段类型
+     * @param authentication 认证信息
+     * @return 成功的代理响应列表
+     */
+    @GetMapping("/{sessionId}/phases/{phaseType}/responses/successful")
+    @Operation(summary = "获取阶段成功响应", description = "获取指定阶段的所有成功代理响应结果")
+    public ResponseEntity<List<AgentResponse>> getPhaseSuccessfulResponses(
+            @Parameter(description = "会话ID") @PathVariable Long sessionId,
+            @Parameter(description = "阶段类型") @PathVariable PhaseType phaseType,
+            Authentication authentication) {
+        
+        // 验证会话所有权
+        validateSessionOwnership(sessionId, authentication);
+        
+        List<AgentResponse> responses = phaseService.getPhaseSuccessfulResponses(sessionId, phaseType);
+        return ResponseEntity.ok(responses);
     }
 
     /**

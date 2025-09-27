@@ -77,4 +77,19 @@ public interface AgentMapper extends BaseMapper<Agent> {
      */
     @Select("SELECT * FROM agents WHERE id = #{agentId} AND user_id = #{userId} AND status != 'DELETED'")
     Agent findByIdAndUserId(@Param("agentId") Long agentId, @Param("userId") Long userId);
+
+    /**
+     * 根据ID列表查询代理
+     * 
+     * @param agentIds 代理ID列表
+     * @return 代理列表
+     */
+    @Select("<script>" +
+            "SELECT * FROM agents WHERE id IN " +
+            "<foreach item='id' collection='agentIds' open='(' separator=',' close=')'>" +
+            "#{id}" +
+            "</foreach>" +
+            " AND status != 'DELETED' ORDER BY created_at DESC" +
+            "</script>")
+    List<Agent> findByIds(@Param("agentIds") List<Long> agentIds);
 }

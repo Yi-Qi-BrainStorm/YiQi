@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -298,6 +299,39 @@ public class AgentService {
         return agents.stream()
                 .map(AgentSummaryResponse::fromEntity)
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 根据ID列表获取代理
+     * 
+     * @param agentIds 代理ID列表
+     * @return 代理列表
+     */
+    @Transactional(readOnly = true)
+    public List<Agent> getAgentsByIds(List<Long> agentIds) {
+        logger.debug("根据ID列表获取代理，数量: {}", agentIds.size());
+        
+        if (agentIds == null || agentIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+        
+        return agentMapper.findByIds(agentIds);
+    }
+
+    /**
+     * 根据ID获取代理
+     * 
+     * @param agentId 代理ID
+     * @return Agent实体
+     * @throws AgentNotFoundException 如果代理不存在
+     */
+    @Transactional(readOnly = true)
+    public Agent getAgentById(Long agentId) {
+        Agent agent = agentMapper.selectById(agentId);
+        if (agent == null) {
+            throw new AgentNotFoundException("代理不存在，ID: " + agentId);
+        }
+        return agent;
     }
 
     /**

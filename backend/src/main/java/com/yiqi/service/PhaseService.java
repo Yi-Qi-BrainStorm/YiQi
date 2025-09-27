@@ -1,5 +1,7 @@
 package com.yiqi.service;
 
+import com.yiqi.dto.ai.AgentInferenceResponse;
+import com.yiqi.dto.ai.ParallelInferenceResult;
 import com.yiqi.entity.*;
 import com.yiqi.enums.*;
 import com.yiqi.exception.*;
@@ -9,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -32,6 +35,240 @@ public class PhaseService {
 
     @Autowired
     private SessionAgentMapper sessionAgentMapper;
+
+    @Autowired
+    private AIInferenceService aiInferenceService;
+
+    @Autowired
+    private AgentService agentService;
+
+    /**
+     * 执行创意生成阶段
+     * 
+     * @param sessionId 会话ID
+     * @param topic 头脑风暴主题
+     * @throws SessionNotFoundException 如果会话不存在
+     * @throws PhaseNotFoundException 如果阶段不存在
+     * @throws IllegalStateException 如果阶段状态不允许执行
+     */
+    @Transactional
+    public void executeIdeaGenerationPhase(Long sessionId, String topic) {
+        // 验证会话存在
+        BrainstormSession session = getSessionById(sessionId);
+        
+        // 获取创意生成阶段
+        Phase phase = phaseMapper.findBySessionIdAndPhaseType(sessionId, PhaseType.IDEA_GENERATION);
+        if (phase == null) {
+            throw new PhaseNotFoundException("创意生成阶段不存在");
+        }
+        
+        // 检查阶段是否正在进行
+        if (!phase.isInProgress()) {
+            throw new IllegalStateException("创意生成阶段当前状态不允许执行: " + phase.getStatus());
+        }
+        
+        // 获取会话的活跃代理
+        List<SessionAgent> sessionAgents = sessionAgentMapper.findActiveAgentsBySessionId(sessionId);
+        if (sessionAgents.isEmpty()) {
+            throw new IllegalStateException("会话没有活跃的代理");
+        }
+        
+        // 获取代理详细信息
+        List<Agent> agents = new ArrayList<>();
+        for (SessionAgent sessionAgent : sessionAgents) {
+            Agent agent = agentService.getAgentById(sessionAgent.getAgentId());
+            if (agent != null) {
+                agents.add(agent);
+            }
+        }
+        
+        if (agents.isEmpty()) {
+            throw new IllegalStateException("无法获取有效的代理信息");
+        }
+        
+        // 构建会话上下文
+        String sessionContext = buildSessionContext(session, topic);
+        
+        try {
+            // 执行并行推理
+            ParallelInferenceResult result = aiInferenceService.processParallelInference(
+                agents, topic, sessionContext, sessionId.toString(), PhaseType.IDEA_GENERATION
+            );
+            
+            // 保存代理响应结果
+            saveAgentResponses(phase.getId(), result);
+            
+            // 如果有成功的响应，自动提交审核
+            if (result.hasSuccessfulResponses()) {
+                String summary = result.getPhaseSummary() != null ? 
+                    result.getPhaseSummary() : 
+                    generateDefaultSummary(result, PhaseType.IDEA_GENERATION);
+                
+                submitPhaseForApproval(sessionId, PhaseType.IDEA_GENERATION, summary);
+            } else {
+                // 如果没有成功的响应，标记阶段失败
+                throw new IllegalStateException("创意生成阶段没有成功的代理响应");
+            }
+            
+        } catch (Exception e) {
+            // 处理执行失败的情况
+            throw new IllegalStateException("创意生成阶段执行失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 执行技术可行性分析阶段
+     * 
+     * @param sessionId 会话ID
+     * @param topic 头脑风暴主题
+     * @throws SessionNotFoundException 如果会话不存在
+     * @throws PhaseNotFoundException 如果阶段不存在
+     * @throws IllegalStateException 如果阶段状态不允许执行
+     */
+    @Transactional
+    public void executeFeasibilityAnalysisPhase(Long sessionId, String topic) {
+        // 验证会话存在
+        BrainstormSession session = getSessionById(sessionId);
+        
+        // 获取技术可行性分析阶段
+        Phase phase = phaseMapper.findBySessionIdAndPhaseType(sessionId, PhaseType.FEASIBILITY_ANALYSIS);
+        if (phase == null) {
+            throw new PhaseNotFoundException("技术可行性分析阶段不存在");
+        }
+        
+        // 检查阶段是否正在进行
+        if (!phase.isInProgress()) {
+            throw new IllegalStateException("技术可行性分析阶段当前状态不允许执行: " + phase.getStatus());
+        }
+        
+        // 获取会话的活跃代理
+        List<SessionAgent> sessionAgents = sessionAgentMapper.findActiveAgentsBySessionId(sessionId);
+        if (sessionAgents.isEmpty()) {
+            throw new IllegalStateException("会话没有活跃的代理");
+        }
+        
+        // 获取代理详细信息
+        List<Agent> agents = new ArrayList<>();
+        for (SessionAgent sessionAgent : sessionAgents) {
+            Agent agent = agentService.getAgentById(sessionAgent.getAgentId());
+            if (agent != null) {
+                agents.add(agent);
+            }
+        }
+        
+        if (agents.isEmpty()) {
+            throw new IllegalStateException("无法获取有效的代理信息");
+        }
+        
+        // 获取前面阶段的结果
+        String previousResults = getPreviousPhaseResults(sessionId, PhaseType.FEASIBILITY_ANALYSIS);
+        
+        // 构建会话上下文，包含前面阶段的结果
+        String sessionContext = buildSessionContextWithPreviousResults(session, topic, previousResults);
+        
+        try {
+            // 执行并行推理
+            ParallelInferenceResult result = aiInferenceService.processParallelInference(
+                agents, topic, sessionContext, sessionId.toString(), PhaseType.FEASIBILITY_ANALYSIS
+            );
+            
+            // 保存代理响应结果
+            saveAgentResponses(phase.getId(), result);
+            
+            // 如果有成功的响应，自动提交审核
+            if (result.hasSuccessfulResponses()) {
+                String summary = result.getPhaseSummary() != null ? 
+                    result.getPhaseSummary() : 
+                    generateDefaultSummary(result, PhaseType.FEASIBILITY_ANALYSIS);
+                
+                submitPhaseForApproval(sessionId, PhaseType.FEASIBILITY_ANALYSIS, summary);
+            } else {
+                // 如果没有成功的响应，标记阶段失败
+                throw new IllegalStateException("技术可行性分析阶段没有成功的代理响应");
+            }
+            
+        } catch (Exception e) {
+            // 处理执行失败的情况
+            throw new IllegalStateException("技术可行性分析阶段执行失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 执行缺点讨论阶段
+     * 
+     * @param sessionId 会话ID
+     * @param topic 头脑风暴主题
+     * @throws SessionNotFoundException 如果会话不存在
+     * @throws PhaseNotFoundException 如果阶段不存在
+     * @throws IllegalStateException 如果阶段状态不允许执行
+     */
+    @Transactional
+    public void executeDrawbackDiscussionPhase(Long sessionId, String topic) {
+        // 验证会话存在
+        BrainstormSession session = getSessionById(sessionId);
+        
+        // 获取缺点讨论阶段
+        Phase phase = phaseMapper.findBySessionIdAndPhaseType(sessionId, PhaseType.DRAWBACK_DISCUSSION);
+        if (phase == null) {
+            throw new PhaseNotFoundException("缺点讨论阶段不存在");
+        }
+        
+        // 检查阶段是否正在进行
+        if (!phase.isInProgress()) {
+            throw new IllegalStateException("缺点讨论阶段当前状态不允许执行: " + phase.getStatus());
+        }
+        
+        // 获取会话的活跃代理
+        List<SessionAgent> sessionAgents = sessionAgentMapper.findActiveAgentsBySessionId(sessionId);
+        if (sessionAgents.isEmpty()) {
+            throw new IllegalStateException("会话没有活跃的代理");
+        }
+        
+        // 获取代理详细信息
+        List<Agent> agents = new ArrayList<>();
+        for (SessionAgent sessionAgent : sessionAgents) {
+            Agent agent = agentService.getAgentById(sessionAgent.getAgentId());
+            if (agent != null) {
+                agents.add(agent);
+            }
+        }
+        
+        if (agents.isEmpty()) {
+            throw new IllegalStateException("无法获取有效的代理信息");
+        }
+        
+        // 获取前面阶段的结果
+        String previousResults = getPreviousPhaseResults(sessionId, PhaseType.DRAWBACK_DISCUSSION);
+        
+        // 构建会话上下文，包含前面阶段的结果
+        String sessionContext = buildSessionContextWithPreviousResults(session, topic, previousResults);
+        
+        try {
+            // 执行并行推理
+            ParallelInferenceResult result = aiInferenceService.processParallelInference(
+                agents, topic, sessionContext, sessionId.toString(), PhaseType.DRAWBACK_DISCUSSION
+            );
+            
+            // 保存代理响应结果
+            saveAgentResponses(phase.getId(), result);
+            
+            // 如果有成功的响应，自动提交审核
+            if (result.hasSuccessfulResponses()) {
+                String summary = result.getPhaseSummary() != null ? 
+                    result.getPhaseSummary() : 
+                    generateDefaultSummary(result, PhaseType.DRAWBACK_DISCUSSION);
+                
+                submitPhaseForApproval(sessionId, PhaseType.DRAWBACK_DISCUSSION, summary);
+            } else {
+                // 如果没有成功的响应，标记阶段失败
+                throw new IllegalStateException("缺点讨论阶段没有成功的代理响应");
+            }
+            
+        } catch (Exception e) {
+            // 处理执行失败的情况
+            throw new IllegalStateException("缺点讨论阶段执行失败: " + e.getMessage(), e);
+        }
+    }
 
     /**
      * 开始指定阶段
@@ -77,6 +314,39 @@ public class PhaseService {
         
         // 为所有活跃代理创建响应记录
         createAgentResponseRecords(phase.getId(), sessionId);
+        
+        // 如果是创意生成阶段，需要额外的处理
+        if (phaseType == PhaseType.IDEA_GENERATION) {
+            // 创意生成阶段需要在启动后立即执行推理
+            // 这里只是标记阶段已开始，实际的推理执行需要调用executeIdeaGenerationPhase方法
+        }
+    }
+
+    /**
+     * 执行指定阶段的推理处理
+     * 
+     * @param sessionId 会话ID
+     * @param phaseType 阶段类型
+     * @param topic 头脑风暴主题
+     * @throws SessionNotFoundException 如果会话不存在
+     * @throws PhaseNotFoundException 如果阶段不存在
+     * @throws IllegalStateException 如果阶段状态不允许执行
+     */
+    @Transactional
+    public void executePhase(Long sessionId, PhaseType phaseType, String topic) {
+        switch (phaseType) {
+            case IDEA_GENERATION:
+                executeIdeaGenerationPhase(sessionId, topic);
+                break;
+            case FEASIBILITY_ANALYSIS:
+                executeFeasibilityAnalysisPhase(sessionId, topic);
+                break;
+            case DRAWBACK_DISCUSSION:
+                executeDrawbackDiscussionPhase(sessionId, topic);
+                break;
+            default:
+                throw new IllegalArgumentException("不支持的阶段类型: " + phaseType);
+        }
     }
 
     /**
@@ -145,15 +415,15 @@ public class PhaseService {
         phase.approve();
         phaseMapper.updateById(phase);
         
+        // 标记阶段为完成
+        phase.complete();
+        phaseMapper.updateById(phase);
+        
         // 检查是否为最后阶段
         if (phaseType.isLast()) {
             // 完成整个会话
             session.complete();
             sessionMapper.updateById(session);
-            
-            // 标记最后阶段为完成
-            phase.complete();
-            phaseMapper.updateById(phase);
         } else {
             // 准备下一阶段
             PhaseType nextPhaseType = phaseType.getNext();
@@ -323,6 +593,50 @@ public class PhaseService {
         return phaseMapper.getPhaseProgressStats(sessionId);
     }
 
+    /**
+     * 获取阶段的代理响应结果
+     * 
+     * @param sessionId 会话ID
+     * @param phaseType 阶段类型
+     * @return 代理响应列表
+     * @throws SessionNotFoundException 如果会话不存在
+     * @throws PhaseNotFoundException 如果阶段不存在
+     */
+    public List<AgentResponse> getPhaseResponses(Long sessionId, PhaseType phaseType) {
+        // 验证会话存在
+        getSessionById(sessionId);
+        
+        // 获取阶段
+        Phase phase = phaseMapper.findBySessionIdAndPhaseType(sessionId, phaseType);
+        if (phase == null) {
+            throw new PhaseNotFoundException("阶段不存在: " + phaseType);
+        }
+        
+        return agentResponseMapper.findByPhaseId(phase.getId());
+    }
+
+    /**
+     * 获取阶段的成功响应结果
+     * 
+     * @param sessionId 会话ID
+     * @param phaseType 阶段类型
+     * @return 成功的代理响应列表
+     * @throws SessionNotFoundException 如果会话不存在
+     * @throws PhaseNotFoundException 如果阶段不存在
+     */
+    public List<AgentResponse> getPhaseSuccessfulResponses(Long sessionId, PhaseType phaseType) {
+        // 验证会话存在
+        getSessionById(sessionId);
+        
+        // 获取阶段
+        Phase phase = phaseMapper.findBySessionIdAndPhaseType(sessionId, phaseType);
+        if (phase == null) {
+            throw new PhaseNotFoundException("阶段不存在: " + phaseType);
+        }
+        
+        return agentResponseMapper.findSuccessfulResponsesByPhaseId(phase.getId());
+    }
+
     // 私有辅助方法
 
     /**
@@ -360,5 +674,150 @@ public class PhaseService {
         for (AgentResponse response : responses) {
             agentResponseMapper.deleteById(response.getId());
         }
+    }
+
+    /**
+     * 构建会话上下文
+     */
+    private String buildSessionContext(BrainstormSession session, String topic) {
+        StringBuilder context = new StringBuilder();
+        context.append("会话标题: ").append(session.getTitle()).append("\n");
+        if (session.getDescription() != null && !session.getDescription().trim().isEmpty()) {
+            context.append("会话描述: ").append(session.getDescription()).append("\n");
+        }
+        context.append("讨论主题: ").append(topic).append("\n");
+        context.append("会话创建时间: ").append(session.getCreatedAt()).append("\n");
+        return context.toString();
+    }
+
+    /**
+     * 保存代理响应结果
+     */
+    private void saveAgentResponses(Long phaseId, ParallelInferenceResult result) {
+        for (AgentInferenceResponse response : result.getAgentResponses()) {
+            // 查找现有的响应记录
+            AgentResponse agentResponse = agentResponseMapper.findByPhaseIdAndAgentId(
+                phaseId, response.getAgentId()
+            );
+            
+            if (agentResponse != null) {
+                // 更新现有记录
+                if (response.isSuccess()) {
+                    agentResponse.markSuccess(response.getContent(), response.getProcessingTimeMs());
+                } else if ("TIMEOUT".equals(response.getStatus())) {
+                    agentResponse.markTimeout(response.getProcessingTimeMs());
+                } else {
+                    agentResponse.markFailed(response.getErrorMessage(), response.getProcessingTimeMs());
+                }
+                agentResponseMapper.updateById(agentResponse);
+            } else {
+                // 创建新记录
+                agentResponse = new AgentResponse(phaseId, response.getAgentId());
+                if (response.isSuccess()) {
+                    agentResponse.markSuccess(response.getContent(), response.getProcessingTimeMs());
+                } else if ("TIMEOUT".equals(response.getStatus())) {
+                    agentResponse.markTimeout(response.getProcessingTimeMs());
+                } else {
+                    agentResponse.markFailed(response.getErrorMessage(), response.getProcessingTimeMs());
+                }
+                agentResponseMapper.insert(agentResponse);
+            }
+        }
+    }
+
+    /**
+     * 生成默认阶段总结
+     */
+    private String generateDefaultSummary(ParallelInferenceResult result, PhaseType phaseType) {
+        StringBuilder summary = new StringBuilder();
+        summary.append(phaseType.getDisplayName()).append("阶段完成。\n");
+        summary.append("参与代理数量: ").append(result.getTotalAgents()).append("\n");
+        summary.append("成功响应数量: ").append(result.getSuccessfulAgents()).append("\n");
+        summary.append("成功率: ").append(String.format("%.1f%%", result.getSuccessRate() * 100)).append("\n");
+        
+        if (result.hasSuccessfulResponses()) {
+            if (phaseType == PhaseType.IDEA_GENERATION) {
+                summary.append("\n各代理从不同角度提出了创新的想法和建议，为后续阶段提供了良好的基础。");
+            } else if (phaseType == PhaseType.FEASIBILITY_ANALYSIS) {
+                summary.append("\n各代理从技术角度评估了前面阶段的创意想法，分析了实现的可行性和技术难点。");
+            } else if (phaseType == PhaseType.DRAWBACK_DISCUSSION) {
+                summary.append("\n各代理深入讨论了前面阶段想法的潜在缺点和改进建议，提出了优化方案。");
+            }
+        }
+        
+        return summary.toString();
+    }
+
+    /**
+     * 获取前面阶段的结果
+     * 
+     * @param sessionId 会话ID
+     * @param currentPhaseType 当前阶段类型
+     * @return 前面阶段的结果文本
+     */
+    private String getPreviousPhaseResults(Long sessionId, PhaseType currentPhaseType) {
+        StringBuilder results = new StringBuilder();
+        
+        // 根据当前阶段获取需要的前面阶段
+        List<PhaseType> previousPhases = new ArrayList<>();
+        
+        if (currentPhaseType == PhaseType.FEASIBILITY_ANALYSIS) {
+            previousPhases.add(PhaseType.IDEA_GENERATION);
+        } else if (currentPhaseType == PhaseType.DRAWBACK_DISCUSSION) {
+            previousPhases.add(PhaseType.IDEA_GENERATION);
+            previousPhases.add(PhaseType.FEASIBILITY_ANALYSIS);
+        }
+        
+        for (PhaseType phaseType : previousPhases) {
+            Phase phase = phaseMapper.findBySessionIdAndPhaseType(sessionId, phaseType);
+            if (phase != null && phase.isCompleted()) {
+                results.append("=== ").append(phaseType.getDisplayName()).append("阶段结果 ===\n");
+                
+                // 添加阶段总结
+                if (phase.getSummary() != null && !phase.getSummary().trim().isEmpty()) {
+                    results.append("阶段总结：\n").append(phase.getSummary()).append("\n\n");
+                }
+                
+                // 添加成功的代理响应
+                List<AgentResponse> responses = agentResponseMapper.findSuccessfulResponsesByPhaseId(phase.getId());
+                for (AgentResponse response : responses) {
+                    // 获取代理信息
+                    Agent agent = agentService.getAgentById(response.getAgentId());
+                    if (agent != null) {
+                        results.append("【").append(agent.getRoleType()).append(" - ")
+                               .append(agent.getName()).append("】\n");
+                        results.append(response.getContent()).append("\n\n");
+                    }
+                }
+                
+                results.append("\n");
+            }
+        }
+        
+        return results.toString();
+    }
+
+    /**
+     * 构建包含前面阶段结果的会话上下文
+     * 
+     * @param session 会话信息
+     * @param topic 主题
+     * @param previousResults 前面阶段的结果
+     * @return 会话上下文
+     */
+    private String buildSessionContextWithPreviousResults(BrainstormSession session, String topic, String previousResults) {
+        StringBuilder context = new StringBuilder();
+        context.append("会话标题: ").append(session.getTitle()).append("\n");
+        if (session.getDescription() != null && !session.getDescription().trim().isEmpty()) {
+            context.append("会话描述: ").append(session.getDescription()).append("\n");
+        }
+        context.append("讨论主题: ").append(topic).append("\n");
+        context.append("会话创建时间: ").append(session.getCreatedAt()).append("\n\n");
+        
+        if (previousResults != null && !previousResults.trim().isEmpty()) {
+            context.append("前面阶段的讨论结果：\n").append(previousResults);
+        }
+        
+        return context.toString();
     }
 }

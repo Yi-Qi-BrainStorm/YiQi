@@ -61,14 +61,12 @@ yiqi:
   # AI服务配置
   ai:
     qiniu:
-      api-key: ${QINIU_API_KEY:your-qiniu-api-key}
-      base-url: https://api.qiniu.com/ai/inference
+      api-key: ${QINIU_API_KEY:sk-075a648e951f9028d95f7cfd54bb95f82b4d52b45e638a6774ca01fca8b30f9e}
+      base-url: https://openai.qiniu.com/v1
+      backup-url: https://api.qnaigc.com/v1
       timeout: 30000
       retry-attempts: 3
-      models:
-        - qwen-plus
-        - qwen-turbo
-        - qwen-max
+      model: deepseek/deepseek-v3.1-terminus
     aliyun:
       access-key-id: ${ALIYUN_ACCESS_KEY_ID:your-aliyun-access-key-id}
       access-key-secret: ${ALIYUN_ACCESS_KEY_SECRET:your-aliyun-access-key-secret}
