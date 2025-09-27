@@ -66,13 +66,15 @@ CREATE TABLE session_agents (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '关联ID',
     session_id BIGINT NOT NULL COMMENT '会话ID',
     agent_id BIGINT NOT NULL COMMENT '代理ID',
-    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE' COMMENT '参与状态(ACTIVE/INACTIVE)',
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE' COMMENT '参与状态(ACTIVE/INACTIVE/DELETED)',
     joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '加入时间',
+    last_active_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后活跃时间',
     FOREIGN KEY (session_id) REFERENCES brainstorm_sessions(id) ON DELETE CASCADE,
     FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE,
     UNIQUE KEY uk_session_agent (session_id, agent_id),
     INDEX idx_session_id (session_id),
-    INDEX idx_agent_id (agent_id)
+    INDEX idx_agent_id (agent_id),
+    INDEX idx_last_active_at (last_active_at)
 ) ENGINE=InnoDB COMMENT='会话代理关联表';
 
 -- 5. 阶段表
@@ -85,11 +87,13 @@ CREATE TABLE phases (
     started_at TIMESTAMP NULL COMMENT '开始时间',
     completed_at TIMESTAMP NULL COMMENT '完成时间',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     FOREIGN KEY (session_id) REFERENCES brainstorm_sessions(id) ON DELETE CASCADE,
     INDEX idx_session_id (session_id),
     INDEX idx_phase_type (phase_type),
     INDEX idx_status (status),
-    INDEX idx_started_at (started_at)
+    INDEX idx_started_at (started_at),
+    INDEX idx_updated_at (updated_at)
 ) ENGINE=InnoDB COMMENT='阶段表';
 
 -- 6. 代理响应表
@@ -97,11 +101,12 @@ CREATE TABLE agent_responses (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '响应ID',
     phase_id BIGINT NOT NULL COMMENT '阶段ID',
     agent_id BIGINT NOT NULL COMMENT '代理ID',
-    content TEXT NOT NULL COMMENT '响应内容',
-    status VARCHAR(20) NOT NULL DEFAULT 'COMPLETED' COMMENT '响应状态(PENDING/COMPLETED/FAILED)',
-    processing_time_ms INT COMMENT '处理时间(毫秒)',
+    content TEXT COMMENT '响应内容',
+    status VARCHAR(20) NOT NULL DEFAULT 'PROCESSING' COMMENT '响应状态(PROCESSING/SUCCESS/FAILED/TIMEOUT)',
     error_message TEXT COMMENT '错误信息',
+    response_time_ms BIGINT COMMENT '响应时间(毫秒)',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     FOREIGN KEY (phase_id) REFERENCES phases(id) ON DELETE CASCADE,
     FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE,
     INDEX idx_phase_id (phase_id),
@@ -142,3 +147,32 @@ CREATE TABLE agent_versions (
     INDEX idx_status (status),
     INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB COMMENT='代理历史版本表';
+
+
+-- 使用数据库
+USE yiqi_brainstorm;
+
+-- 1. 给 session_agents 表添加 last_active_at 字段
+ALTER TABLE session_agents
+    ADD COLUMN last_active_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后活跃时间';
+
+-- 2. 给 phases 表添加 updated_at 字段
+ALTER TABLE phases
+    ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间';
+
+-- 3. 给 agent_responses 表添加 updated_at 字段
+ALTER TABLE agent_responses
+    ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间';
+
+-- 4. 修改 agent_responses 表的字段名（如果存在 processing_time_ms 字段的话）
+-- 先检查字段是否存在，如果存在则重命名
+ALTER TABLE agent_responses
+    CHANGE COLUMN processing_time_ms response_time_ms BIGINT COMMENT '响应时间(毫秒)';
+
+-- 5. 修改 agent_responses 表的 content 字段为可空
+ALTER TABLE agent_responses
+    MODIFY COLUMN content TEXT COMMENT '响应内容';
+
+-- 6. 修改 agent_responses 表的 status 字段默认值
+ALTER TABLE agent_responses
+    MODIFY COLUMN status VARCHAR(20) NOT NULL DEFAULT 'PROCESSING' COMMENT '响应状态(PROCESSING/SUCCESS/FAILED/TIMEOUT)';

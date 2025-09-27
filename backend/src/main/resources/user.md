@@ -6,7 +6,6 @@
 
 **基础 URL**:
 
-- 认证接口: `/auth`
 - 用户管理接口: `/users`
 
 **认证方式**: JWT Bearer Token
@@ -17,7 +16,6 @@
 
 **接口地址**:
 
-- `POST /auth/register`
 - `POST /users/register`
 
 **接口描述**: 创建新用户账户
@@ -84,7 +82,7 @@
 
 **接口地址**:
 
-- `POST /auth/login`
+- `POST /users/login`
 
 **接口描述**: 用户身份验证并获取访问令牌
 
