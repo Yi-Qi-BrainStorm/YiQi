@@ -306,17 +306,6 @@ public class SessionService {
     // 私有辅助方法
 
     /**
-     * 根据ID获取会话
-     */
-    private BrainstormSession getSessionById(Long sessionId) {
-        BrainstormSession session = sessionMapper.selectById(sessionId);
-        if (session == null) {
-            throw new SessionNotFoundException("会话不存在: " + sessionId);
-        }
-        return session;
-    }
-
-    /**
      * 验证创建会话请求
      */
     private void validateCreateSessionRequest(CreateSessionRequest request) {
@@ -353,7 +342,7 @@ public class SessionService {
      * 初始化会话的三个阶段
      */
     private void initializePhases(Long sessionId) {
-        PhaseType[] phaseTypes = {PhaseType.IDEA_GENERATION, PhaseType.FEASIBILITY_ANALYSIS, PhaseType.CRITICISM_DISCUSSION};
+        PhaseType[] phaseTypes = {PhaseType.IDEA_GENERATION, PhaseType.FEASIBILITY_ANALYSIS, PhaseType.DRAWBACK_DISCUSSION};
         
         for (PhaseType phaseType : phaseTypes) {
             Phase phase = new Phase(sessionId, phaseType);
@@ -432,6 +421,47 @@ public class SessionService {
         if (!session.getUserId().equals(userId)) {
             throw new IllegalStateException("用户无权访问该会话: " + sessionId);
         }
+    }
+
+    /**
+     * 根据ID获取会话（公共方法）
+     * 
+     * @param sessionId 会话ID
+     * @return 会话实体
+     * @throws SessionNotFoundException 如果会话不存在
+     */
+    public BrainstormSession getSessionById(Long sessionId) {
+        BrainstormSession session = sessionMapper.selectById(sessionId);
+        if (session == null) {
+            throw new SessionNotFoundException("会话不存在: " + sessionId);
+        }
+        return session;
+    }
+
+    /**
+     * 获取会话的代理列表
+     * 
+     * @param sessionId 会话ID
+     * @return 代理列表
+     * @throws SessionNotFoundException 如果会话不存在
+     */
+    public List<Agent> getSessionAgents(Long sessionId) {
+        // 验证会话存在
+        getSessionById(sessionId);
+        
+        // 获取会话代理关联
+        List<SessionAgent> sessionAgents = sessionAgentMapper.findActiveAgentsBySessionId(sessionId);
+        
+        // 获取代理详情
+        List<Long> agentIds = sessionAgents.stream()
+                .map(SessionAgent::getAgentId)
+                .collect(Collectors.toList());
+        
+        if (agentIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+        
+        return agentMapper.findByIds(agentIds);
     }
 
     /**
