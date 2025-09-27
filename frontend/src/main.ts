@@ -6,6 +6,7 @@ import App from './App.vue'
 import { useAuthStore } from '@/stores/auth'
 import { AuthMonitor } from '@/utils/authUtils'
 import { setupGlobalErrorHandler } from '@/services/errorHandler'
+import { vPreload, preloadManager } from '@/utils/preloadUtils'
 
 import 'ant-design-vue/dist/reset.css'
 import './styles/main.scss'
@@ -16,6 +17,9 @@ const pinia = createPinia()
 app.use(pinia)
 app.use(router)
 app.use(Antd)
+
+// 注册全局指令
+app.directive('preload', vPreload)
 
 // 设置全局错误处理
 setupGlobalErrorHandler(app)
@@ -35,6 +39,9 @@ const initializeApp = async () => {
   } catch (error) {
     console.warn('初始化认证状态失败:', error)
   }
+  
+  // 启动智能预加载
+  preloadManager.setupSmartPreload()
   
   // 挂载应用
   app.mount('#app')

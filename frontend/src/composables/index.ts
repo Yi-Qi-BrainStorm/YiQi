@@ -18,3 +18,12 @@ export { useLoading, useProgress, useGlobalLoading } from './useLoading';
 
 // 通知反馈
 export { useToast, useOperationFeedback } from './useToast';
+
+// 懒加载和性能优化
+export { 
+  useLazyLoad, 
+  useLazyComponent, 
+  useLazyImage, 
+  useLazyList, 
+  useResourcePreload 
+} from './useLazyLoading';
