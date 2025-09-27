@@ -113,9 +113,11 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .main-layout {
   min-height: 100vh;
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
 }
 
 .layout-sider {
@@ -123,38 +125,83 @@ onMounted(() => {
   left: 0;
   top: 0;
   bottom: 0;
-  z-index: 100;
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
+  z-index: var(--z-index-fixed);
+  box-shadow: var(--shadow-lg);
+  background-color: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  transition: all var(--transition-base);
+
+  @include mobile-only {
+    transform: translateX(-100%);
+    z-index: var(--z-index-modal);
+    
+    &:not(.ant-layout-sider-collapsed) {
+      transform: translateX(0);
+    }
+  }
 }
 
 .layout-content {
   margin-left: 256px;
-  transition: margin-left 0.2s;
+  transition: margin-left var(--transition-base);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+
+  @include mobile-only {
+    margin-left: 0;
+  }
 }
 
 .layout-sider.ant-layout-sider-collapsed + .layout-content {
   margin-left: 80px;
+
+  @include mobile-only {
+    margin-left: 0;
+  }
 }
 
 .layout-header {
   position: sticky;
   top: 0;
-  z-index: 99;
+  z-index: var(--z-index-sticky);
   padding: 0;
   height: 64px;
   line-height: 64px;
-  background: #fff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  background-color: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(8px);
+  transition: all var(--transition-base);
+
+  @include mobile-only {
+    position: relative;
+    box-shadow: var(--shadow-base);
+  }
 }
 
 .page-content {
+  flex: 1;
   min-height: calc(100vh - 64px - 70px);
-  background: #f0f2f5;
+  background-color: var(--color-background-secondary);
+  padding: var(--spacing-6);
+  transition: background-color var(--transition-base);
+
+  @include mobile-only {
+    padding: var(--spacing-4);
+    min-height: calc(100vh - 64px - 90px);
+  }
+
+  @include tablet-up {
+    padding: var(--spacing-8);
+  }
 }
 
 .content-wrapper {
   position: relative;
   min-height: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
 }
 
 .page-loading {
@@ -162,89 +209,129 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+  
+  :deep(.ant-spin-dot) {
+    color: var(--color-primary-500);
+  }
 }
 
 .layout-footer {
-  background: #fff;
-  border-top: 1px solid #f0f0f0;
-  padding: 16px 24px;
+  background-color: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  padding: var(--spacing-4) var(--spacing-6);
+  margin-top: auto;
+  transition: all var(--transition-base);
+
+  @include mobile-only {
+    padding: var(--spacing-4);
+  }
 }
 
 .footer-content {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
+
+  @include mobile-only {
+    flex-direction: column;
+    gap: var(--spacing-2);
+    text-align: center;
+  }
 }
 
 .footer-left {
-  color: #666;
-  font-size: 14px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
 }
 
 .footer-right {
   display: flex;
   align-items: center;
+  gap: var(--spacing-2);
+
+  @include mobile-only {
+    justify-content: center;
+  }
 }
 
 .footer-link {
-  color: #666;
+  color: var(--color-text-secondary);
   text-decoration: none;
-  font-size: 14px;
-  transition: color 0.2s;
+  font-size: var(--font-size-sm);
+  transition: color var(--transition-fast);
+  padding: var(--spacing-1) var(--spacing-2);
+  border-radius: var(--radius-base);
 
   &:hover {
-    color: #1890ff;
+    color: var(--color-primary-600);
+    background-color: var(--color-surface-hover);
+  }
+
+  &:focus {
+    outline: 2px solid var(--color-primary-500);
+    outline-offset: 2px;
   }
 }
 
 /* 页面切换动画 */
 .page-fade-enter-active,
 .page-fade-leave-active {
-  transition: opacity 0.3s ease;
+  transition: opacity var(--transition-base), transform var(--transition-base);
 }
 
-.page-fade-enter-from,
+.page-fade-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
 .page-fade-leave-to {
   opacity: 0;
+  transform: translateY(-10px);
 }
 
-/* 响应式设计 */
-@media (max-width: 768px) {
-  .layout-content {
-    margin-left: 0;
-  }
-
-  .layout-sider {
+/* 移动端侧边栏遮罩 */
+@include mobile-only {
+  .layout-sider:not(.ant-layout-sider-collapsed)::before {
+    content: '';
     position: fixed;
-    z-index: 1000;
-    transform: translateX(-100%);
-    transition: transform 0.3s;
-  }
-
-  .layout-sider:not(.ant-layout-sider-collapsed) {
-    transform: translateX(0);
-  }
-
-  .footer-content {
-    flex-direction: column;
-    gap: 8px;
-    text-align: center;
-  }
-
-  .footer-right {
-    justify-content: center;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: -1;
+    animation: fadeIn var(--transition-base);
   }
 }
 
-@media (max-width: 576px) {
-  .layout-header {
-    position: relative;
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 滚动条样式 */
+.page-content {
+  &::-webkit-scrollbar {
+    width: 6px;
   }
 
-  .page-content {
-    min-height: calc(100vh - 64px - 90px);
+  &::-webkit-scrollbar-track {
+    background: var(--color-background-secondary);
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: var(--radius-full);
+
+    &:hover {
+      background: var(--color-text-tertiary);
+    }
   }
 }
 </style>

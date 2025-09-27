@@ -27,3 +27,9 @@ export {
   useLazyList, 
   useResourcePreload 
 } from './useLazyLoading';
+
+// 主题管理
+export { useTheme } from './useTheme';
+
+// 页面标题管理
+export { usePageTitle } from './usePageTitle';
