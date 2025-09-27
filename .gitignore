@@ -1,0 +1,128 @@
+# Kiro IDE 相关文件
+.kiro/
+
+# 依赖目录
+node_modules/
+*/node_modules/
+
+# 构建输出
+dist/
+build/
+out/
+*/dist/
+*/build/
+*/out/
+
+# 日志文件
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# 运行时数据
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage 目录
+lib-cov
+coverage/
+*.lcov
+.nyc_output
+
+# 缓存目录
+.npm
+.eslintcache
+.stylelintcache
+.cache/
+.parcel-cache/
+
+# pnpm 相关
+.pnpm-debug.log*
+.pnpm-store/
+
+# 环境变量文件
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*.local
+
+# 编辑器和IDE
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系统生成的文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# 临时文件
+*.tmp
+*.temp
+.tmp/
+.temp/
+
+# 数据库文件
+*.sqlite
+*.sqlite3
+*.db
+
+# 备份文件
+*.bak
+*.backup
+
+# 压缩文件
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# 运行时文件
+*.tsbuildinfo
+
+# 测试相关
+.jest/
+test-results/
+playwright-report/
+
+# 部署相关
+.vercel
+.netlify
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# 本地配置文件
+config.local.js
+config.local.json
+
+# 锁文件（根据团队需要决定是否忽略）
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# 自定义忽略
+# 添加项目特定的忽略规则
