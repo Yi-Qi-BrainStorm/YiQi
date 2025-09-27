@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { authService } from '@/services/authService';
+import { useLoadingStore } from './loading';
+import { NotificationService } from '@/services/notificationService';
 import type { 
   User, 
   LoginCredentials, 
@@ -27,8 +29,12 @@ export const useAuthStore = defineStore('auth', () => {
    * 用户登录
    */
   const login = async (credentials: LoginCredentials): Promise<AuthResponse> => {
+    const loadingStore = useLoadingStore();
+    const loadingId = 'auth-login';
+    
     loading.value = true;
     error.value = null;
+    loadingStore.startLoading(loadingId, '正在登录...');
     
     try {
       const response = await authService.login(credentials);
@@ -44,12 +50,17 @@ export const useAuthStore = defineStore('auth', () => {
       const { AuthMonitor } = await import('@/utils/authUtils');
       AuthMonitor.getInstance().startMonitoring();
       
+      // 显示成功提示
+      NotificationService.success(`欢迎回来，${response.user.username}！`);
+      
       return response;
     } catch (err: any) {
       error.value = err.message || '登录失败';
+      // 错误已经在service层处理，这里不需要重复显示
       throw err;
     } finally {
       loading.value = false;
+      loadingStore.stopLoading(loadingId);
     }
   };
 
@@ -57,21 +68,28 @@ export const useAuthStore = defineStore('auth', () => {
    * 用户注册
    */
   const register = async (userData: RegisterData): Promise<RegisterResponse> => {
+    const loadingStore = useLoadingStore();
+    const loadingId = 'auth-register';
+    
     loading.value = true;
     error.value = null;
+    loadingStore.startLoading(loadingId, '正在注册账户...');
     
     try {
       const response = await authService.register(userData);
       
       // 注册成功后不自动登录，需要用户手动登录
       // 根据后端API，注册接口只返回用户信息，不包含token
+      NotificationService.success('注册成功！请使用您的账户登录。');
       
       return response;
     } catch (err: any) {
       error.value = err.message || '注册失败';
+      // 错误已经在service层处理
       throw err;
     } finally {
       loading.value = false;
+      loadingStore.stopLoading(loadingId);
     }
   };
 
@@ -79,12 +97,19 @@ export const useAuthStore = defineStore('auth', () => {
    * 用户登出
    */
   const logout = async (): Promise<void> => {
+    const loadingStore = useLoadingStore();
+    const loadingId = 'auth-logout';
+    
+    loadingStore.startLoading(loadingId, '正在登出...');
+    
     try {
       // 调用后端登出接口
       await authService.logout();
+      NotificationService.success('已安全登出');
     } catch (err) {
       // 即使后端登出失败，也要清除本地状态
       console.warn('后端登出失败:', err);
+      NotificationService.warning('登出时发生错误，但已清除本地登录状态');
     } finally {
       // 停止监控认证状态
       const { AuthMonitor } = await import('@/utils/authUtils');
@@ -97,6 +122,8 @@ export const useAuthStore = defineStore('auth', () => {
       
       // 清除持久化数据
       localStorage.removeItem('auth_token');
+      
+      loadingStore.stopLoading(loadingId);
     }
   };
 

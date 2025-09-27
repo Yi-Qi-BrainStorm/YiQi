@@ -86,9 +86,10 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { message } from 'ant-design-vue';
 import { UserOutlined, LockOutlined } from '@ant-design/icons-vue';
 import { useAuth } from '@/composables/useAuth';
+import { useLoading } from '@/composables/useLoading';
+import { useOperationFeedback } from '@/composables/useToast';
 import type { LoginCredentials } from '@/types/user';
 import type { FormInstance, Rule } from 'ant-design-vue/es/form';
 
@@ -96,7 +97,20 @@ import type { FormInstance, Rule } from 'ant-design-vue/es/form';
 const router = useRouter();
 
 // 认证相关
-const { login, loading, error, clearError, isAuthenticated, requireGuest } = useAuth();
+const { login, isAuthenticated, requireGuest } = useAuth();
+
+// 加载状态管理
+const { isLoading: loading, withLoading } = useLoading('login-form');
+
+// 操作反馈
+const { success, error: showError } = useOperationFeedback();
+
+// 本地错误状态
+const error = ref<string | null>(null);
+
+const clearError = () => {
+  error.value = null;
+};
 
 // 表单引用
 const formRef = ref<FormInstance>();
@@ -129,9 +143,12 @@ const isFormValid = computed(() => {
 
 // 处理表单提交
 const handleSubmit = async (values: LoginCredentials) => {
+  error.value = null;
+  
   try {
-    await login(values);
-    message.success('登录成功！');
+    await withLoading(async () => {
+      await login(values);
+    }, '正在登录...');
     
     // 获取重定向路径
     const redirectPath = (router.currentRoute.value.query.redirect as string) || '/dashboard';
@@ -140,7 +157,7 @@ const handleSubmit = async (values: LoginCredentials) => {
     await router.push(redirectPath);
   } catch (err: any) {
     console.error('登录失败:', err);
-    // 错误信息已在store中设置，会通过error computed显示
+    error.value = err.message || '登录失败，请检查用户名和密码';
   }
 };
 

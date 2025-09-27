@@ -5,6 +5,7 @@ import router from './router'
 import App from './App.vue'
 import { useAuthStore } from '@/stores/auth'
 import { AuthMonitor } from '@/utils/authUtils'
+import { setupGlobalErrorHandler } from '@/services/errorHandler'
 
 import 'ant-design-vue/dist/reset.css'
 import './styles/main.scss'
@@ -15,6 +16,9 @@ const pinia = createPinia()
 app.use(pinia)
 app.use(router)
 app.use(Antd)
+
+// 设置全局错误处理
+setupGlobalErrorHandler(app)
 
 // 初始化认证状态
 const initializeApp = async () => {
