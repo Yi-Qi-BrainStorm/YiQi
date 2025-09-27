@@ -206,8 +206,8 @@ export function useSocket(namespace: string = '/') {
    * 加入房间
    * Requirement 4.1: 加入特定的Socket房间以接收相关事件
    */
-  const joinRoom = (sessionId: string): void => {
-    const roomName = generateRoomName(sessionId, 'session');
+  const joinRoom = (sessionId: number): void => {
+    const roomName = generateRoomName(sessionId.toString(), 'session');
     
     if (!socketInstance || !isConnected.value) {
       logger.warn(`尝试加入房间 ${roomName} 但Socket未连接`);
@@ -221,8 +221,8 @@ export function useSocket(namespace: string = '/') {
   /**
    * 离开房间
    */
-  const leaveRoom = (sessionId: string): void => {
-    const roomName = generateRoomName(sessionId, 'session');
+  const leaveRoom = (sessionId: number): void => {
+    const roomName = generateRoomName(sessionId.toString(), 'session');
     
     if (!socketInstance) {
       return;

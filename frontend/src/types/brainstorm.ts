@@ -1,28 +1,65 @@
 // 头脑风暴相关类型定义
-import type { AgentResult } from './agent';
+import type { AgentResult, AgentResponse } from './agent';
 
-export type SessionStatus = 'active' | 'paused' | 'completed' | 'cancelled';
-export type BrainstormStage = 1 | 2 | 3;
+export type SessionStatus = 'CREATED' | 'IN_PROGRESS' | 'PAUSED' | 'COMPLETED' | 'CANCELLED';
+export type PhaseType = 'IDEA_GENERATION' | 'FEASIBILITY_ANALYSIS' | 'CRITICISM_DISCUSSION';
+export type PhaseStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'WAITING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'COMPLETED';
 
 export interface BrainstormSession {
-  id: string;
-  topic: string;
-  userId: string;
-  agentIds: string[];
-  currentStage: number;
+  id: number;
+  userId: number;
+  title: string;
+  description: string | null;
+  topic: string | null;
   status: SessionStatus;
-  stageResults: StageResult[];
-  finalReport?: FinalReport;
+  currentPhase: PhaseType | null;
   createdAt: string;
   updatedAt: string;
+  agents: SessionAgent[];
+  phases: Phase[];
+  report?: Report;
+}
+
+export interface SessionAgent {
+  id: number;
+  sessionId: number;
+  agentId: number;
+  status: 'ACTIVE' | 'INACTIVE';
+  joinedAt: string;
+  agent: {
+    id: number;
+    name: string;
+    roleType: string;
+    aiModel: string;
+  };
+}
+
+export interface Phase {
+  id: number;
+  sessionId: number;
+  phaseType: PhaseType;
+  status: PhaseStatus;
+  summary: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  responses: AgentResponse[];
+}
+
+export interface Report {
+  id: number;
+  sessionId: number;
+  title: string;
+  content: string; // JSON格式的报告内容
+  status: 'GENERATING' | 'GENERATED' | 'FAILED';
+  filePath: string | null;
+  generatedAt: string;
 }
 
 export interface StageResult {
-  stage: number;
-  stageName: string;
+  phase: Phase;
   agentResults: AgentResult[];
   aiSummary: AISummary;
-  completedAt: string;
 }
 
 export interface AISummary {
@@ -44,7 +81,7 @@ export interface ConflictingView {
 }
 
 export interface FinalReport {
-  sessionId: string;
+  sessionId: number;
   topic: string;
   executiveSummary: string;
   designConcept: DesignConcept;
@@ -180,8 +217,10 @@ export interface MitigationStrategy {
 
 // 会话创建相关类型
 export interface CreateSessionRequest {
+  title: string;
+  description?: string;
   topic: string;
-  agentIds: string[];
+  agentIds: number[];
 }
 
 export interface SessionCreationResponse {
@@ -200,35 +239,35 @@ export interface StageProgress {
 // WebSocket事件类型
 export interface SocketEvents {
   'brainstorm:start': {
-    sessionId: string;
+    sessionId: number;
     topic: string;
-    agentIds: string[];
+    agentIds: number[];
   };
   'brainstorm:proceed': {
-    sessionId: string;
-    stage: number;
+    sessionId: number;
+    phaseType: PhaseType;
   };
-  'brainstorm:restart-stage': {
-    sessionId: string;
-    stage: number;
+  'brainstorm:restart-phase': {
+    sessionId: number;
+    phaseType: PhaseType;
   };
   'agent:status-update': {
-    sessionId: string;
-    agentId: string;
-    status: import('./agent').AgentStatus;
+    sessionId: number;
+    agentId: number;
+    status: import('./agent').AgentRuntimeStatus;
   };
   'agent:result': {
-    sessionId: string;
-    agentId: string;
+    sessionId: number;
+    agentId: number;
     result: import('./agent').AgentResult;
   };
-  'stage:summary': {
-    sessionId: string;
-    stage: number;
+  'phase:summary': {
+    sessionId: number;
+    phaseType: PhaseType;
     summary: AISummary;
   };
   'session:complete': {
-    sessionId: string;
+    sessionId: number;
     finalReport: FinalReport;
   };
 }

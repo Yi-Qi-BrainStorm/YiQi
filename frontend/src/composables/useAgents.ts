@@ -36,7 +36,8 @@ export function useAgents() {
     page?: number;
     limit?: number;
     search?: string;
-    role?: string;
+    roleType?: string;
+    status?: import('@/types/agent').AgentStatus;
   }): Promise<void> => {
     return await agentStore.fetchAgents(params);
   };
@@ -45,7 +46,7 @@ export function useAgents() {
    * 获取单个代理详情
    * Requirement 2.2: 用户点击代理时显示详细配置信息
    */
-  const fetchAgent = async (id: string): Promise<Agent> => {
+  const fetchAgent = async (id: number): Promise<Agent> => {
     return await agentStore.fetchAgent(id);
   };
 
@@ -61,7 +62,7 @@ export function useAgents() {
    * 更新代理配置
    * Requirement 2.4: 用户修改代理配置并保存时更新代理信息
    */
-  const updateAgent = async (id: string, agentData: Partial<AgentFormData>): Promise<Agent> => {
+  const updateAgent = async (id: number, agentData: Partial<AgentFormData>): Promise<Agent> => {
     return await agentStore.updateAgent(id, agentData);
   };
 
@@ -69,7 +70,7 @@ export function useAgents() {
    * 删除代理
    * Requirement 2.5: 用户确认删除代理时从系统中移除该代理
    */
-  const deleteAgent = async (id: string): Promise<void> => {
+  const deleteAgent = async (id: number): Promise<void> => {
     return await agentStore.deleteAgent(id);
   };
 
@@ -77,7 +78,7 @@ export function useAgents() {
    * 批量删除代理
    * Requirement 2.5: 支持批量删除多个代理
    */
-  const deleteAgents = async (ids: string[]): Promise<void> => {
+  const deleteAgents = async (ids: number[]): Promise<void> => {
     return await agentStore.deleteAgents(ids);
   };
 
@@ -85,7 +86,7 @@ export function useAgents() {
    * 复制代理
    * Requirement 2.6: 用户选择复制代理时创建代理副本
    */
-  const duplicateAgent = async (id: string, name?: string): Promise<Agent> => {
+  const duplicateAgent = async (id: number, name?: string): Promise<Agent> => {
     return await agentStore.duplicateAgent(id, name);
   };
 
@@ -93,21 +94,21 @@ export function useAgents() {
    * 选择代理
    * Requirement 2.6: 代理选择功能，用于头脑风暴会话
    */
-  const selectAgent = (agentId: string): void => {
+  const selectAgent = (agentId: number): void => {
     agentStore.selectAgent(agentId);
   };
 
   /**
    * 取消选择代理
    */
-  const deselectAgent = (agentId: string): void => {
+  const deselectAgent = (agentId: number): void => {
     agentStore.deselectAgent(agentId);
   };
 
   /**
    * 切换代理选择状态
    */
-  const toggleAgentSelection = (agentId: string): void => {
+  const toggleAgentSelection = (agentId: number): void => {
     agentStore.toggleAgentSelection(agentId);
   };
 
@@ -128,7 +129,7 @@ export function useAgents() {
   /**
    * 批量选择代理
    */
-  const selectAgents = (agentIds: string[]): void => {
+  const selectAgents = (agentIds: number[]): void => {
     agentStore.selectAgents(agentIds);
   };
 
@@ -144,7 +145,7 @@ export function useAgents() {
    * 测试代理配置
    * Requirement 2.4: 测试代理配置是否正常工作
    */
-  const testAgent = async (id: string, testPrompt: string): Promise<{
+  const testAgent = async (id: number, testPrompt: string): Promise<{
     success: boolean;
     response?: string;
     error?: string;
@@ -176,13 +177,13 @@ export function useAgents() {
 
       if (filters.role) {
         filtered = filtered.filter(agent => 
-          agent.role.toLowerCase().includes(filters.role!.toLowerCase())
+          agent.roleType.toLowerCase().includes(filters.role!.toLowerCase())
         );
       }
 
       if (filters.modelType) {
         filtered = filtered.filter(agent => 
-          agent.modelType === filters.modelType
+          agent.aiModel === filters.modelType
         );
       }
 
@@ -198,7 +199,7 @@ export function useAgents() {
     const groups: Record<string, Agent[]> = {};
     
     agents.value.forEach(agent => {
-      const role = agent.role || '未分类';
+      const role = agent.roleType || '未分类';
       if (!groups[role]) {
         groups[role] = [];
       }
@@ -219,11 +220,11 @@ export function useAgents() {
 
     agents.value.forEach(agent => {
       // 统计角色分布
-      const role = agent.role || '未分类';
+      const role = agent.roleType || '未分类';
       roleStats[role] = (roleStats[role] || 0) + 1;
 
       // 统计模型分布
-      modelStats[agent.modelType] = (modelStats[agent.modelType] || 0) + 1;
+      modelStats[agent.aiModel] = (modelStats[agent.aiModel] || 0) + 1;
     });
 
     return {
@@ -248,7 +249,7 @@ export function useAgents() {
       errors.push('代理名称不能为空');
     }
 
-    if (!agentData.role?.trim()) {
+    if (!agentData.roleType?.trim()) {
       errors.push('代理角色不能为空');
     }
 
@@ -256,33 +257,11 @@ export function useAgents() {
       errors.push('系统提示词不能为空');
     }
 
-    if (!agentData.modelType) {
+    if (!agentData.aiModel) {
       errors.push('必须选择AI模型');
     }
 
-    if (agentData.modelConfig) {
-      const { temperature, maxTokens, topP, frequencyPenalty, presencePenalty } = agentData.modelConfig;
-      
-      if (temperature < 0 || temperature > 2) {
-        errors.push('温度值必须在0-2之间');
-      }
 
-      if (maxTokens < 1 || maxTokens > 4096) {
-        errors.push('最大令牌数必须在1-4096之间');
-      }
-
-      if (topP < 0 || topP > 1) {
-        errors.push('Top P值必须在0-1之间');
-      }
-
-      if (frequencyPenalty < -2 || frequencyPenalty > 2) {
-        errors.push('频率惩罚值必须在-2到2之间');
-      }
-
-      if (presencePenalty < -2 || presencePenalty > 2) {
-        errors.push('存在惩罚值必须在-2到2之间');
-      }
-    }
 
     return {
       isValid: errors.length === 0,

@@ -5,6 +5,8 @@ export interface User {
   username: string;
   createdAt: string;
   lastLoginAt: string | null;
+  failedLoginAttempts: number;
+  lockedUntil: string | null;
 }
 
 export interface LoginCredentials {
@@ -29,6 +31,8 @@ export interface RegisterResponse {
   username: string;
   createdAt: string;
   lastLoginAt: string | null;
+  failedLoginAttempts: number;
+  lockedUntil: string | null;
 }
 
 // 扩展的用户配置文件（可选功能）

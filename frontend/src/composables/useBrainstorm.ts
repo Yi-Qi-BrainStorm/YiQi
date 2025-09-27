@@ -56,8 +56,8 @@ export function useBrainstorm() {
    * 创建新会话
    * Requirement 3.1: 用户输入主题并选择代理时创建新的头脑风暴会话
    */
-  const createSession = async (topic: string, agentIds: string[]): Promise<BrainstormSession> => {
-    const session = await brainstormStore.createSession(topic, agentIds);
+  const createSession = async (title: string, topic: string, agentIds: number[], description?: string): Promise<BrainstormSession> => {
+    const session = await brainstormStore.createSession(title, topic, agentIds, description);
     
     // 创建成功后跳转到会话页面
     await router.push(`/brainstorm/${session.id}`);
@@ -69,7 +69,7 @@ export function useBrainstorm() {
    * 加载会话
    * Requirement 3.2: 用户选择历史会话时加载会话详情和状态
    */
-  const loadSession = async (sessionId: string): Promise<void> => {
+  const loadSession = async (sessionId: number): Promise<void> => {
     await brainstormStore.loadSession(sessionId);
     
     // 加载会话后连接WebSocket
@@ -82,15 +82,15 @@ export function useBrainstorm() {
    * 开始会话
    * Requirement 4.1: 用户点击开始按钮时启动头脑风暴流程
    */
-  const startSession = async (sessionId: string): Promise<void> => {
+  const startSession = async (sessionId: number): Promise<void> => {
     await brainstormStore.startSession(sessionId);
     
     // 通过WebSocket通知后端开始会话
     if (socket.isConnected.value && currentSession.value) {
       socket.emit('brainstorm:start', {
         sessionId,
-        topic: currentSession.value.topic,
-        agentIds: currentSession.value.agentIds,
+        topic: currentSession.value.topic || '',
+        agentIds: currentSession.value.agents.map(a => a.agentId),
       });
     }
   };
@@ -99,7 +99,7 @@ export function useBrainstorm() {
    * 暂停会话
    * Requirement 4.2: 用户可以暂停正在进行的头脑风暴会话
    */
-  const pauseSession = async (sessionId: string): Promise<void> => {
+  const pauseSession = async (sessionId: number): Promise<void> => {
     return await brainstormStore.pauseSession(sessionId);
   };
 
@@ -107,7 +107,7 @@ export function useBrainstorm() {
    * 恢复会话
    * Requirement 4.2: 用户可以恢复暂停的头脑风暴会话
    */
-  const resumeSession = async (sessionId: string): Promise<void> => {
+  const resumeSession = async (sessionId: number): Promise<void> => {
     return await brainstormStore.resumeSession(sessionId);
   };
 
@@ -115,7 +115,7 @@ export function useBrainstorm() {
    * 停止会话
    * Requirement 4.3: 用户可以停止头脑风暴会话
    */
-  const stopSession = async (sessionId: string): Promise<void> => {
+  const stopSession = async (sessionId: number): Promise<void> => {
     return await brainstormStore.stopSession(sessionId);
   };
 
@@ -131,10 +131,14 @@ export function useBrainstorm() {
     await brainstormStore.proceedToNextStage();
     
     // 通过WebSocket通知后端进入下一阶段
-    if (socket.isConnected.value) {
+    if (socket.isConnected.value && currentSession.value.currentPhase) {
+      const phaseTypes: import('@/types/brainstorm').PhaseType[] = ['IDEA_GENERATION', 'FEASIBILITY_ANALYSIS', 'CRITICISM_DISCUSSION'];
+      const currentPhaseIndex = phaseTypes.indexOf(currentSession.value.currentPhase);
+      const nextPhaseType = phaseTypes[currentPhaseIndex + 1];
+      
       socket.emit('brainstorm:proceed', {
         sessionId: currentSession.value.id,
-        stage: currentSession.value.currentStage,
+        phaseType: nextPhaseType,
       });
     }
   };
@@ -151,10 +155,10 @@ export function useBrainstorm() {
     await brainstormStore.restartCurrentStage();
     
     // 通过WebSocket通知后端重新开始阶段
-    if (socket.isConnected.value) {
-      socket.emit('brainstorm:restart-stage', {
+    if (socket.isConnected.value && currentSession.value.currentPhase) {
+      socket.emit('brainstorm:restart-phase', {
         sessionId: currentSession.value.id,
-        stage: currentSession.value.currentStage,
+        phaseType: currentSession.value.currentPhase,
       });
     }
   };
@@ -163,22 +167,22 @@ export function useBrainstorm() {
    * 获取最终报告
    * Requirement 4.5: 会话完成后生成并显示最终报告
    */
-  const fetchFinalReport = async (sessionId: string): Promise<FinalReport> => {
+  const fetchFinalReport = async (sessionId: number): Promise<FinalReport> => {
     return await brainstormStore.fetchFinalReport(sessionId);
   };
 
   /**
    * 删除会话
    */
-  const deleteSession = async (sessionId: string): Promise<void> => {
+  const deleteSession = async (sessionId: number): Promise<void> => {
     return await brainstormStore.deleteSession(sessionId);
   };
 
   /**
    * 复制会话
    */
-  const duplicateSession = async (sessionId: string, newTopic?: string): Promise<BrainstormSession> => {
-    return await brainstormStore.duplicateSession(sessionId, newTopic);
+  const duplicateSession = async (sessionId: number, newTitle?: string): Promise<BrainstormSession> => {
+    return await brainstormStore.duplicateSession(sessionId, newTitle);
   };
 
   /**
@@ -190,9 +194,9 @@ export function useBrainstorm() {
 
     // 监听代理状态更新
     socket.on('agent:status-update', (data: {
-      sessionId: string;
-      agentId: string;
-      status: AgentStatus;
+      sessionId: number;
+      agentId: number;
+      status: import('@/types/agent').AgentRuntimeStatus;
     }) => {
       if (currentSession.value && data.sessionId === currentSession.value.id) {
         brainstormStore.updateAgentStatus(data.agentId, data.status);
@@ -201,8 +205,8 @@ export function useBrainstorm() {
 
     // 监听代理结果
     socket.on('agent:result', (data: {
-      sessionId: string;
-      agentId: string;
+      sessionId: number;
+      agentId: number;
       result: AgentResult;
     }) => {
       if (currentSession.value && data.sessionId === currentSession.value.id) {
@@ -211,19 +215,19 @@ export function useBrainstorm() {
     });
 
     // 监听阶段总结
-    socket.on('stage:summary', (data: {
-      sessionId: string;
-      stage: number;
+    socket.on('phase:summary', (data: {
+      sessionId: number;
+      phaseType: import('@/types/brainstorm').PhaseType;
       summary: AISummary;
     }) => {
       if (currentSession.value && data.sessionId === currentSession.value.id) {
-        brainstormStore.setStageSummary(data.stage, data.summary);
+        brainstormStore.setStageSummary(data.phaseType, data.summary);
       }
     });
 
     // 监听会话完成
     socket.on('session:complete', (data: {
-      sessionId: string;
+      sessionId: number;
       finalReport: FinalReport;
     }) => {
       if (currentSession.value && data.sessionId === currentSession.value.id) {
@@ -240,7 +244,7 @@ export function useBrainstorm() {
 
     socket.off('agent:status-update');
     socket.off('agent:result');
-    socket.off('stage:summary');
+    socket.off('phase:summary');
     socket.off('session:complete');
   };
 
@@ -250,15 +254,15 @@ export function useBrainstorm() {
   const getSessionStats = computed(() => {
     if (!currentSession.value) return null;
 
-    const totalAgents = currentSession.value.agentIds.length;
+    const totalAgents = currentSession.value.agents.length;
     const completedAgents = Object.values(agentStatuses.value).filter(
       status => status === 'completed'
     ).length;
     const thinkingAgents = Object.values(agentStatuses.value).filter(
       status => status === 'thinking'
     ).length;
-    const completedStages = currentSession.value.stageResults.filter(
-      result => !!result.completedAt
+    const completedStages = currentSession.value.phases.filter(
+      phase => phase.status === 'COMPLETED'
     ).length;
 
     return {
@@ -266,7 +270,7 @@ export function useBrainstorm() {
       completedAgents,
       thinkingAgents,
       completedStages,
-      currentStage: currentSession.value.currentStage,
+      currentPhase: currentSession.value.currentPhase,
       totalStages: 3,
       progress: Math.round((completedAgents / totalAgents) * 100),
     };
@@ -275,18 +279,22 @@ export function useBrainstorm() {
   /**
    * 验证会话创建参数
    */
-  const validateSessionCreation = (topic: string, agentIds: string[]): {
+  const validateSessionCreation = (title: string, topic: string, agentIds: number[]): {
     isValid: boolean;
     errors: string[];
   } => {
     const errors: string[] = [];
 
-    if (!topic.trim()) {
-      errors.push('主题不能为空');
+    if (!title.trim()) {
+      errors.push('标题不能为空');
     }
 
-    if (topic.length > 200) {
-      errors.push('主题长度不能超过200个字符');
+    if (title.length > 200) {
+      errors.push('标题长度不能超过200个字符');
+    }
+
+    if (!topic.trim()) {
+      errors.push('主题不能为空');
     }
 
     if (agentIds.length === 0) {
@@ -306,9 +314,13 @@ export function useBrainstorm() {
   /**
    * 获取阶段名称
    */
-  const getStageName = (stage: number): string => {
-    const stageNames = ['创意生成', '技术可行性分析', '缺点讨论'];
-    return stageNames[stage - 1] || '未知阶段';
+  const getStageName = (phaseType: import('@/types/brainstorm').PhaseType): string => {
+    const phaseNames: Record<import('@/types/brainstorm').PhaseType, string> = {
+      'IDEA_GENERATION': '创意生成',
+      'FEASIBILITY_ANALYSIS': '技术可行性分析',
+      'CRITICISM_DISCUSSION': '缺点讨论',
+    };
+    return phaseNames[phaseType] || '未知阶段';
   };
 
   /**
@@ -321,17 +333,17 @@ export function useBrainstorm() {
 
     switch (action) {
       case 'start':
-        return status === 'paused' || (status === 'active' && currentSession.value.currentStage === 1);
+        return status === 'PAUSED' || status === 'CREATED';
       case 'pause':
-        return status === 'active';
+        return status === 'IN_PROGRESS';
       case 'resume':
-        return status === 'paused';
+        return status === 'PAUSED';
       case 'stop':
-        return status === 'active' || status === 'paused';
+        return status === 'IN_PROGRESS' || status === 'PAUSED';
       case 'proceed':
         return canProceedToNextStage.value;
       case 'restart':
-        return status === 'active' || status === 'paused';
+        return status === 'IN_PROGRESS' || status === 'PAUSED';
       default:
         return false;
     }
