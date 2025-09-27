@@ -15,7 +15,7 @@ const api = axios.create({
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     // 从localStorage获取token
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('auth_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -62,7 +62,7 @@ api.interceptors.response.use(
     // 处理认证失效
     if (appError.code === 'UNAUTHORIZED') {
       // 清除本地token
-      localStorage.removeItem('token');
+      localStorage.removeItem('auth_token');
       // 触发全局认证失效事件
       window.dispatchEvent(new CustomEvent('auth:expired'));
     }

@@ -52,13 +52,11 @@ export interface LoginRequest {
 
 export interface RegisterRequest {
   username: string;
-  email: string;
   password: string;
 }
 
 export interface UpdateUserRequest {
   username?: string;
-  email?: string;
   avatar?: string;
   bio?: string;
   preferences?: import('./user').UserPreferences;
