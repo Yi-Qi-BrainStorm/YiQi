@@ -56,16 +56,26 @@ mybatis-plus:
       logic-not-delete-value: 0
   mapper-locations: classpath*:mapper/*.xml
 
+# 七牛云API配置
+qiniu:
+  api:
+    key: ${QINIU_API_KEY:sk-5989d9479592a2c28c52a6e15be54ed4ceb27d8b37e72547b3d5c63a130dd1ae}
+    url: ${QINIU_API_URL:https://openai.qiniu.com/v1/chat/completions}
+    model: ${QINIU_API_MODEL:deepseek-v3-0324}
+    timeout: 30000
+    retry-attempts: 3
+
 # 意启平台自定义配置
 yiqi:
   # AI服务配置
   ai:
     qiniu:
-      api-key: ${QINIU_API_KEY:your-qiniu-api-key}
-      base-url: https://api.qiniu.com/ai/inference
+      api-key: ${QINIU_API_KEY:sk-5989d9479592a2c28c52a6e15be54ed4ceb27d8b37e72547b3d5c63a130dd1ae}
+      base-url: https://openai.qiniu.com/v1/chat/completions
       timeout: 30000
       retry-attempts: 3
       models:
+        - deepseek-v3-0324
         - qwen-plus
         - qwen-turbo
         - qwen-max
