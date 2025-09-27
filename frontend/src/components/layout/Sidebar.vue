@@ -15,54 +15,43 @@
     <!-- 导航菜单 -->
     <a-menu
       v-model:selectedKeys="selectedKeys"
+      v-model:openKeys="openKeys"
       mode="inline"
       theme="dark"
       class="sidebar-menu"
       :inline-collapsed="collapsed"
       @click="handleMenuClick"
     >
-      <a-menu-item key="dashboard">
+      <!-- 主要导航项 -->
+      <a-menu-item
+        v-for="item in mainNavigationItems"
+        :key="item.key"
+      >
         <template #icon>
-          <DashboardOutlined />
+          <component :is="getMenuIcon(item.icon)" />
         </template>
-        <span>工作台</span>
-      </a-menu-item>
-
-      <a-menu-item key="agents">
-        <template #icon>
-          <RobotOutlined />
-        </template>
-        <span>代理管理</span>
-      </a-menu-item>
-
-      <a-menu-item key="brainstorm">
-        <template #icon>
-          <BulbOutlined />
-        </template>
-        <span>头脑风暴</span>
+        <span>{{ item.label }}</span>
       </a-menu-item>
 
       <a-menu-divider />
 
+      <!-- 历史记录子菜单 -->
       <a-sub-menu key="history">
         <template #icon>
           <HistoryOutlined />
         </template>
         <template #title>历史记录</template>
-        <a-menu-item key="sessions">
+        <a-menu-item key="brainstorm-history">
           <template #icon>
             <FileTextOutlined />
           </template>
           <span>会话记录</span>
         </a-menu-item>
-        <a-menu-item key="reports">
-          <template #icon>
-            <FilePdfOutlined />
-          </template>
-          <span>报告导出</span>
-        </a-menu-item>
       </a-sub-menu>
 
+      <a-menu-divider />
+
+      <!-- 设置 -->
       <a-menu-item key="settings">
         <template #icon>
           <SettingOutlined />
@@ -99,6 +88,7 @@
 import { ref, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
+import { ROUTES, NAVIGATION_ITEMS } from '@/constants/routes'
 import {
   DashboardOutlined,
   RobotOutlined,
@@ -119,25 +109,55 @@ const router = useRouter()
 const route = useRoute()
 const { user } = useAuth()
 
-// 当前选中的菜单项
+// 当前选中的菜单项和展开的子菜单
 const selectedKeys = ref<string[]>([])
+const openKeys = ref<string[]>([])
+
+// 主要导航项（从常量中获取）
+const mainNavigationItems = computed(() => NAVIGATION_ITEMS)
+
+// 图标映射
+const iconMap = {
+  dashboard: DashboardOutlined,
+  robot: RobotOutlined,
+  bulb: BulbOutlined,
+  history: HistoryOutlined
+}
 
 // 用户信息
 const username = computed(() => user.value?.username || '用户')
 const userRole = computed(() => '创意设计师')
 const userAvatar = computed(() => user.value?.avatar || '')
 
+// 获取菜单图标组件
+const getMenuIcon = (iconName: string) => {
+  return iconMap[iconName as keyof typeof iconMap] || DashboardOutlined
+}
+
 // 根据当前路由设置选中的菜单项
 const updateSelectedKeys = () => {
-  const routeName = route.name as string
-  if (routeName) {
-    selectedKeys.value = [routeName.toLowerCase()]
+  const currentPath = route.path
+  
+  // 根据路径匹配菜单项
+  if (currentPath.startsWith(ROUTES.DASHBOARD)) {
+    selectedKeys.value = ['dashboard']
+  } else if (currentPath.startsWith(ROUTES.AGENTS)) {
+    selectedKeys.value = ['agents']
+  } else if (currentPath.startsWith(ROUTES.BRAINSTORM)) {
+    if (currentPath.includes('/history')) {
+      selectedKeys.value = ['brainstorm-history']
+      openKeys.value = ['history']
+    } else {
+      selectedKeys.value = ['brainstorm']
+    }
+  } else if (currentPath.startsWith('/settings')) {
+    selectedKeys.value = ['settings']
   }
 }
 
 // 监听路由变化
 watch(
-  () => route.name,
+  () => route.path,
   () => {
     updateSelectedKeys()
   },
@@ -147,12 +167,11 @@ watch(
 // 处理菜单点击
 const handleMenuClick = ({ key }: { key: string }) => {
   const routeMap: Record<string, string> = {
-    dashboard: '/dashboard',
-    agents: '/agents',
-    brainstorm: '/brainstorm',
-    sessions: '/history/sessions',
-    reports: '/history/reports',
-    settings: '/settings',
+    dashboard: ROUTES.DASHBOARD,
+    agents: ROUTES.AGENTS,
+    brainstorm: ROUTES.BRAINSTORM,
+    'brainstorm-history': ROUTES.BRAINSTORM_HISTORY,
+    settings: '/settings', // 暂时使用简单路径，后续可以添加到常量中
   }
 
   const path = routeMap[key]
