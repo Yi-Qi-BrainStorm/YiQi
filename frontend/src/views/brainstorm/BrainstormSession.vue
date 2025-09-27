@@ -1,898 +1,1105 @@
 <template>
-  <div class="brainstorm-session-page">
-    <!-- 网络状态指示器 -->
-    <div class="network-status-bar">
-      <NetworkStatusIndicator
-        :connection-status="socket.connectionStatus.value"
-        :is-connecting="socket.isConnecting.value"
-        :latency="socket.latency.value"
-        :reconnect-attempts="socket.reconnectAttempts.value"
-        :socket-id="socket.socketId.value"
-        :error="socket.error.value"
-        :show-text="true"
-        @reconnect="handleReconnect"
-        @refresh="handleRefreshPage"
-      />
-    </div>
-
-    <!-- 连接状态警告 -->
-    <div class="connection-status" v-if="!socket.isConnected.value">
-      <a-alert
-        :message="connectionMessage"
-        :type="connectionAlertType"
-        :show-icon="true"
-        :closable="false"
-        class="connection-alert"
-      >
-        <template #action>
-          <a-button 
-            size="small" 
-            type="primary"
-            :loading="socket.isConnecting.value"
-            @click="handleReconnect"
-          >
-            重新连接
-          </a-button>
-        </template>
-      </a-alert>
-    </div>
-
+  <div class="brainstorm-session">
     <!-- 会话头部 -->
-    <div class="session-header" v-if="currentSession">
-      <div class="session-info">
-        <h1 class="session-title">{{ currentSession.title }}</h1>
-        <div class="session-meta">
-          <a-tag :color="getSessionStatusColor(currentSession.status)">
-            {{ getSessionStatusText(currentSession.status) }}
-          </a-tag>
-          <span class="session-topic">主题: {{ currentSession.topic }}</span>
-          <span class="session-time">创建于 {{ formatTime(currentSession.createdAt) }}</span>
+    <div class="session-header">
+      <div class="header-content">
+        <div class="session-info">
+          <h1 class="session-title">{{ sessionTopic || '新建头脑风暴会话' }}</h1>
+          <div class="session-meta">
+            <a-tag :color="getStatusColor(sessionStatus)">
+              {{ getStatusText(sessionStatus) }}
+            </a-tag>
+            <span v-if="sessionStartTime" class="session-time">
+              开始时间: {{ formatTime(sessionStartTime) }}
+            </span>
+          </div>
+        </div>
+        
+        <div class="session-actions">
+          <a-space>
+            <a-button 
+              v-if="sessionStatus === 'IDLE'" 
+              type="primary" 
+              :loading="isStarting"
+              :disabled="!canStartSession"
+              @click="startSession"
+            >
+              开始头脑风暴
+            </a-button>
+            <a-button 
+              v-if="sessionStatus === 'ACTIVE'" 
+              type="danger" 
+              :loading="isStopping"
+              @click="stopSession"
+            >
+              停止会话
+            </a-button>
+            <a-button @click="showSettings = true">
+              <SettingOutlined />
+              设置
+            </a-button>
+          </a-space>
         </div>
       </div>
       
-      <div class="session-actions">
-        <a-space>
-          <a-button
-            v-if="canPerformAction('start')"
-            type="primary"
-            :loading="isLoading"
-            @click="handleStartSession"
-          >
-            开始头脑风暴
-          </a-button>
-          
-          <a-button
-            v-if="canPerformAction('pause')"
-            :loading="isLoading"
-            @click="handlePauseSession"
-          >
-            暂停会话
-          </a-button>
-          
-          <a-button
-            v-if="canPerformAction('resume')"
-            type="primary"
-            :loading="isLoading"
-            @click="handleResumeSession"
-          >
-            恢复会话
-          </a-button>
-          
-          <a-button
-            v-if="canPerformAction('stop')"
-            danger
-            :loading="isLoading"
-            @click="handleStopSession"
-          >
-            停止会话
-          </a-button>
-        </a-space>
+      <!-- 三阶段进度指示器 -->
+      <div class="progress-section">
+        <a-steps 
+          :current="currentStage - 1" 
+          :status="getStepsStatus()"
+          size="small"
+        >
+          <a-step 
+            title="创意生成" 
+            description="专注于创意想法和概念设计"
+          />
+          <a-step 
+            title="技术可行性分析" 
+            description="分析技术实现和资源需求"
+          />
+          <a-step 
+            title="缺点讨论" 
+            description="识别潜在问题和改进建议"
+          />
+        </a-steps>
       </div>
     </div>
 
-    <!-- 阶段进度指示器 -->
-    <div class="progress-section" v-if="currentSession && stageProgress">
-      <StageProgressIndicator
-        :current-stage="stageProgress.current"
-        :total-stages="stageProgress.total"
-        :stage-names="stageProgress.stages"
-        :completed-stages="stageProgress.completed"
-        :session-status="currentSession.status"
-        :stage-progress="currentStageProgress"
-        :stage-start-time="currentStageStartTime"
-        :can-proceed-to-next="canProceedToNextStage"
-        :can-restart-stage="canPerformAction('restart')"
-        :can-pause-session="canPerformAction('pause')"
-        :can-resume-session="canPerformAction('resume')"
-        @proceed-to-next="handleProceedToNext"
-        @restart-stage="handleRestartStage"
-        @pause-session="handlePauseSession"
-        @resume-session="handleResumeSession"
-      />
-    </div>
+    <!-- 主要内容区域 -->
+    <div class="session-content">
+      <!-- 初始配置阶段 -->
+      <div v-if="sessionStatus === 'IDLE'" class="setup-section">
+        <a-card title="创建头脑风暴会话" class="setup-card">
+          <div class="setup-form">
+            <a-form layout="vertical" :model="sessionConfig">
+              <a-form-item 
+                label="会话主题" 
+                required
+                :rules="[{ required: true, message: '请输入头脑风暴主题' }]"
+              >
+                <a-textarea 
+                  v-model:value="sessionTopic"
+                  placeholder="请详细描述您要进行头脑风暴的文创产品主题，例如：设计一款以传统文化为主题的手机壳产品"
+                  :rows="3"
+                  size="large"
+                  show-count
+                  :maxlength="500"
+                />
+              </a-form-item>
+              
+              <a-form-item 
+                label="选择参与代理" 
+                required
+                :rules="[{ required: true, message: '请至少选择一个代理' }]"
+              >
+                <div class="agents-selection">
+                  <div class="agents-grid">
+                    <div 
+                      v-for="agent in availableAgents" 
+                      :key="agent.id"
+                      :class="['agent-card', { selected: selectedAgents.includes(agent.id) }]"
+                      @click="toggleAgent(agent.id)"
+                    >
+                      <a-avatar :size="48" :style="{ backgroundColor: getAgentColor(agent.roleType) }">
+                        {{ agent.name.charAt(0) }}
+                      </a-avatar>
+                      <div class="agent-info">
+                        <h4>{{ agent.name }}</h4>
+                        <p>{{ agent.roleType }}</p>
+                        <div class="agent-description">{{ getAgentDescription(agent.roleType) }}</div>
+                      </div>
+                      <div class="selection-indicator">
+                        <CheckCircleFilled v-if="selectedAgents.includes(agent.id)" />
+                      </div>
+                    </div>
+                  </div>
+                  <div class="selection-summary">
+                    已选择 {{ selectedAgents.length }} 个代理
+                  </div>
+                </div>
+              </a-form-item>
+            </a-form>
+          </div>
+        </a-card>
+      </div>
 
-    <!-- 代理思考面板 -->
-    <div class="agents-section" v-if="currentSession && currentSession.agents.length">
-      <h3 class="section-title">代理思考状态</h3>
-      <div class="agents-grid">
-        <AgentThinkingPanel
-          v-for="sessionAgent in currentSession.agents"
-          :key="sessionAgent.agentId"
-          :agent="getAgentInfo(sessionAgent.agentId)"
-          :status="getAgentStatus(sessionAgent.agentId)"
-          :result="getAgentResult(sessionAgent.agentId)"
-          :thinking-progress="getAgentThinkingProgress(sessionAgent.agentId)"
-          :estimated-completion-time="getAgentEstimatedTime(sessionAgent.agentId)"
-          :error-message="getAgentError(sessionAgent.agentId)"
-          @view-details="handleViewAgentDetails"
-          @retry-agent="handleRetryAgent"
-          @skip-agent="handleSkipAgent"
-          @copy-result="handleCopyAgentResult"
-          @export-result="handleExportAgentResult"
-        />
+      <!-- 活跃会话界面 -->
+      <div v-if="sessionStatus === 'ACTIVE'" class="active-session">
+        <!-- 当前阶段信息 -->
+        <div class="stage-header">
+          <a-card class="stage-info-card">
+            <div class="stage-info">
+              <div class="stage-title">
+                <h2>{{ getCurrentStageTitle() }}</h2>
+                <a-tag :color="getStageColor(currentStage)">第{{ currentStage }}阶段</a-tag>
+              </div>
+              <p class="stage-description">{{ getCurrentStageDescription() }}</p>
+              <div class="stage-progress">
+                <a-progress 
+                  :percent="getStageProgress()" 
+                  :status="allAgentsCompleted ? 'success' : 'active'"
+                  :stroke-color="getStageColor(currentStage)"
+                />
+              </div>
+            </div>
+          </a-card>
+        </div>
+        
+        <!-- 代理思考状态 -->
+        <div class="agents-section">
+          <h3>代理分析进度</h3>
+          <a-row :gutter="[16, 16]">
+            <a-col 
+              v-for="agent in getSelectedAgents()" 
+              :key="agent.id"
+              :xs="24" :sm="12" :lg="8"
+            >
+              <a-card class="agent-status-card" :class="{ completed: getAgentStatus(agent.id) === 'completed' }">
+                <div class="agent-header">
+                  <a-avatar :size="40" :style="{ backgroundColor: getAgentColor(agent.roleType) }">
+                    {{ agent.name.charAt(0) }}
+                  </a-avatar>
+                  <div class="agent-info">
+                    <h4>{{ agent.name }}</h4>
+                    <div class="status-indicator">
+                      <LoadingOutlined v-if="getAgentStatus(agent.id) === 'thinking'" spin />
+                      <CheckCircleOutlined v-else-if="getAgentStatus(agent.id) === 'completed'" style="color: #52c41a" />
+                      <ClockCircleOutlined v-else style="color: #faad14" />
+                      <span>{{ getAgentStatusText(agent.id) }}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- 代理结果展示 -->
+                <div v-if="getAgentResult(agent.id)" class="agent-result">
+                  <a-collapse ghost>
+                    <a-collapse-panel key="1" header="查看详细分析结果">
+                      <div class="result-content">
+                        <div class="result-section">
+                          <h5>核心观点</h5>
+                          <p>{{ getAgentResult(agent.id).mainPoint }}</p>
+                        </div>
+                        <div class="result-section">
+                          <h5>详细分析</h5>
+                          <p>{{ getAgentResult(agent.id).analysis }}</p>
+                        </div>
+                        <div class="result-section">
+                          <h5>建议方案</h5>
+                          <ul>
+                            <li v-for="suggestion in getAgentResult(agent.id).suggestions" :key="suggestion">
+                              {{ suggestion }}
+                            </li>
+                          </ul>
+                        </div>
+                      </div>
+                    </a-collapse-panel>
+                  </a-collapse>
+                </div>
+                
+                <!-- 思考中的提示 -->
+                <div v-else-if="getAgentStatus(agent.id) === 'thinking'" class="thinking-indicator">
+                  <a-spin size="small" />
+                  <span>正在从{{ agent.roleType }}角度分析...</span>
+                </div>
+              </a-card>
+            </a-col>
+          </a-row>
+        </div>
+        
+        <!-- 阶段总结 -->
+        <div v-if="stageSummary && allAgentsCompleted" class="stage-summary">
+          <a-card title="阶段总结报告" class="summary-card">
+            <div class="summary-content">
+              <div class="summary-section">
+                <h4>关键观点汇总</h4>
+                <ul>
+                  <li v-for="point in stageSummary.keyPoints" :key="point">{{ point }}</li>
+                </ul>
+              </div>
+              
+              <div class="summary-section">
+                <h4>共同建议</h4>
+                <ul>
+                  <li v-for="suggestion in stageSummary.commonSuggestions" :key="suggestion">{{ suggestion }}</li>
+                </ul>
+              </div>
+              
+              <div v-if="stageSummary.conflictingViews.length > 0" class="summary-section">
+                <h4>分歧观点</h4>
+                <ul>
+                  <li v-for="conflict in stageSummary.conflictingViews" :key="conflict">{{ conflict }}</li>
+                </ul>
+              </div>
+              
+              <div class="summary-section">
+                <h4>整体评估</h4>
+                <p>{{ stageSummary.overallAssessment }}</p>
+              </div>
+            </div>
+            
+            <div class="summary-actions">
+              <a-space>
+                <a-button @click="retryCurrentStage" :loading="isRetrying">
+                  重新进行当前阶段
+                </a-button>
+                <a-button 
+                  type="primary" 
+                  @click="proceedToNextStage"
+                  :loading="isProceeding"
+                >
+                  {{ currentStage < 3 ? '进入下一阶段' : '生成最终报告' }}
+                </a-button>
+              </a-space>
+            </div>
+          </a-card>
+        </div>
+      </div>
+
+      <!-- 完成状态 -->
+      <div v-if="sessionStatus === 'COMPLETED'" class="completed-session">
+        <a-result
+          status="success"
+          title="头脑风暴完成！"
+          sub-title="已生成完整的文创产品解决方案，包含从设计稿到成品稿和营销方案的全套内容"
+        >
+          <template #extra>
+            <a-space>
+              <a-button type="primary" @click="viewFinalReport">
+                <FileTextOutlined />
+                查看最终报告
+              </a-button>
+              <a-button @click="exportReport">
+                <DownloadOutlined />
+                导出报告
+              </a-button>
+              <a-button @click="startNewSession">
+                <PlusOutlined />
+                开始新会话
+              </a-button>
+            </a-space>
+          </template>
+        </a-result>
       </div>
     </div>
 
-    <!-- 阶段总结 -->
-    <div class="summary-section" v-if="currentStageSummary">
-      <StageSummary
-        :summary="currentStageSummary"
-        :agent-results="currentStageResults"
-        :stage-name="getCurrentStageName()"
-        :stage-number="stageProgress?.current || 1"
-        :is-last-stage="isLastStage"
-        :completed-at="currentStageCompletedAt"
-        @proceed-to-next="handleProceedToNext"
-        @restart-stage="handleRestartStage"
-        @generate-final-report="handleGenerateFinalReport"
-        @export-stage-results="handleExportStageResults"
-        @view-detailed-results="handleViewDetailedResults"
-      />
-    </div>
-
-    <!-- 最终报告 -->
-    <div class="final-report-section" v-if="currentSession?.finalReport">
-      <ResultReport
-        :final-report="currentSession.finalReport"
-        :session="currentSession"
-        @export-report="handleExportFinalReport"
-      />
-    </div>
-
-    <!-- 加载状态 -->
-    <div class="loading-overlay" v-if="isLoading && !currentSession">
-      <a-spin size="large" />
-      <div class="loading-text">正在加载会话...</div>
-    </div>
-
-    <!-- 错误状态 -->
-    <div class="error-section" v-if="error && !currentSession">
-      <a-result
-        status="error"
-        title="加载失败"
-        :sub-title="error"
-      >
-        <template #extra>
-          <a-button type="primary" @click="handleRetryLoad">
-            重新加载
-          </a-button>
-        </template>
-      </a-result>
-    </div>
+    <!-- 设置弹窗 -->
+    <a-modal
+      v-model:open="showSettings"
+      title="会话设置"
+      @ok="saveSettings"
+    >
+      <a-form layout="vertical">
+        <a-form-item label="AI模型选择">
+          <a-select v-model:value="selectedModel">
+            <a-select-option value="gpt-4">GPT-4 (推荐)</a-select-option>
+            <a-select-option value="gpt-3.5-turbo">GPT-3.5 Turbo</a-select-option>
+            <a-select-option value="claude-3">Claude-3</a-select-option>
+            <a-select-option value="qwen-plus">通义千问 Plus</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item label="代理思考时间限制（秒）">
+          <a-input-number v-model:value="thinkingTimeout" :min="30" :max="300" />
+        </a-form-item>
+        <a-form-item label="并行处理">
+          <a-switch v-model:checked="parallelProcessing" />
+          <div class="setting-description">启用后所有代理将同时开始思考，否则按顺序进行</div>
+        </a-form-item>
+      </a-form>
+    </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
-import { message, Modal } from 'ant-design-vue';
-import { useBrainstorm } from '@/composables/useBrainstorm';
-import { useSocket } from '@/composables/useSocket';
+import { ref, computed, onMounted, h } from 'vue';
+import { useRouter } from 'vue-router';
+import { message } from 'ant-design-vue';
+import {
+  SettingOutlined,
+  LoadingOutlined,
+  CheckCircleOutlined,
+  ClockCircleOutlined,
+  CheckCircleFilled,
+  FileTextOutlined,
+  DownloadOutlined,
+  PlusOutlined,
+} from '@ant-design/icons-vue';
 import { useAgents } from '@/composables/useAgents';
-import StageProgressIndicator from '@/components/brainstorm/StageProgressIndicator.vue';
-import AgentThinkingPanel from '@/components/brainstorm/AgentThinkingPanel.vue';
-import StageSummary from '@/components/brainstorm/StageSummary.vue';
-import ResultReport from '@/components/brainstorm/ResultReport.vue';
-import NetworkStatusIndicator from '@/components/common/NetworkStatusIndicator.vue';
-import type { AgentResult } from '@/types/agent';
-import type { AISummary } from '@/types/brainstorm';
 
-const route = useRoute();
 const router = useRouter();
 
-// 组合式函数
-const brainstorm = useBrainstorm();
-const socket = useSocket('/brainstorm');
-const agents = useAgents();
-
 // 响应式数据
-const sessionId = computed(() => parseInt(route.params.id as string));
-const currentStageProgress = ref<number | null>(null);
-const currentStageStartTime = ref<string | null>(null);
-const agentThinkingProgress = ref<Record<number, number>>({});
-const agentEstimatedTimes = ref<Record<number, string>>({});
-const agentErrors = ref<Record<number, string>>({});
+const sessionStatus = ref<'IDLE' | 'ACTIVE' | 'COMPLETED'>('IDLE');
+const sessionTopic = ref('');
+const sessionStartTime = ref<Date | null>(null);
+const currentStage = ref(1);
+const selectedAgents = ref<number[]>([]);
+const agentStatuses = ref<Record<number, 'idle' | 'thinking' | 'completed'>>({});
+const agentResults = ref<Record<number, any>>({});
+const stageSummary = ref<any>(null);
+const showSettings = ref(false);
+const selectedModel = ref('gpt-4');
+const thinkingTimeout = ref(120);
+const parallelProcessing = ref(true);
+
+// 加载状态
+const isStarting = ref(false);
+const isStopping = ref(false);
+const isRetrying = ref(false);
+const isProceeding = ref(false);
+
+// 会话配置
+const sessionConfig = ref({});
+
+// 使用代理管理
+const { agents: availableAgents, fetchAgents } = useAgents();
 
 // 计算属性
-const {
-  currentSession,
-  agentStatuses,
-  realTimeResults,
-  loading,
-  error,
-  isLoading,
-  stageProgress,
-  canProceedToNextStage,
-  isSessionComplete,
-} = brainstorm;
-
-const connectionMessage = computed(() => {
-  if (socket.isConnecting.value) return '正在连接服务器...';
-  if (socket.error.value) return `连接失败: ${socket.error.value}`;
-  return '与服务器连接已断开';
+const canStartSession = computed(() => {
+  return sessionTopic.value.trim().length > 0 && selectedAgents.value.length > 0;
 });
 
-const connectionAlertType = computed(() => {
-  if (socket.isConnecting.value) return 'info';
-  if (socket.error.value) return 'error';
-  return 'warning';
-});
-
-const currentStageSummary = computed(() => {
-  if (!currentSession.value || !currentSession.value.currentPhase) return null;
-  
-  const currentPhase = currentSession.value.phases.find(
-    phase => phase.phaseType === currentSession.value!.currentPhase
+const allAgentsCompleted = computed(() => {
+  return selectedAgents.value.every(agentId => 
+    agentStatuses.value[agentId] === 'completed'
   );
-  
-  return currentPhase?.aiSummary || null;
-});
-
-const currentStageResults = computed(() => {
-  if (!currentSession.value || !currentSession.value.currentPhase) return [];
-  
-  const currentPhase = currentSession.value.phases.find(
-    phase => phase.phaseType === currentSession.value!.currentPhase
-  );
-  
-  return currentPhase?.agentResults || [];
-});
-
-const currentStageCompletedAt = computed(() => {
-  if (!currentSession.value || !currentSession.value.currentPhase) return '';
-  
-  const currentPhase = currentSession.value.phases.find(
-    phase => phase.phaseType === currentSession.value!.currentPhase
-  );
-  
-  return currentPhase?.completedAt || '';
-});
-
-const isLastStage = computed(() => {
-  return stageProgress.value?.current === stageProgress.value?.total;
 });
 
 // 方法
-const getSessionStatusColor = (status: string): string => {
-  switch (status) {
-    case 'CREATED': return 'blue';
-    case 'IN_PROGRESS': return 'processing';
-    case 'PAUSED': return 'warning';
-    case 'COMPLETED': return 'success';
-    case 'CANCELLED': return 'error';
-    default: return 'default';
-  }
-};
-
-const getSessionStatusText = (status: string): string => {
-  switch (status) {
-    case 'CREATED': return '已创建';
-    case 'IN_PROGRESS': return '进行中';
-    case 'PAUSED': return '已暂停';
-    case 'COMPLETED': return '已完成';
-    case 'CANCELLED': return '已取消';
-    default: return '未知状态';
-  }
-};
-
-const formatTime = (timeString: string): string => {
-  const date = new Date(timeString);
-  return date.toLocaleString('zh-CN');
-};
-
-const getAgentInfo = (agentId: number) => {
-  return agents.agents.value.find(agent => agent.id === agentId) || {
-    id: agentId,
-    name: `代理 ${agentId}`,
-    roleType: '未知角色',
-    aiModel: 'unknown',
+const getStatusColor = (status: string) => {
+  const colors = {
+    'IDLE': 'default',
+    'ACTIVE': 'processing',
+    'COMPLETED': 'success'
   };
+  return colors[status as keyof typeof colors] || 'default';
+};
+
+const getStatusText = (status: string) => {
+  const texts = {
+    'IDLE': '准备中',
+    'ACTIVE': '进行中',
+    'COMPLETED': '已完成'
+  };
+  return texts[status as keyof typeof texts] || status;
+};
+
+const getStepsStatus = () => {
+  if (sessionStatus.value === 'COMPLETED') return 'finish';
+  if (sessionStatus.value === 'ACTIVE') return 'process';
+  return 'wait';
+};
+
+const getCurrentStageTitle = () => {
+  const titles = {
+    1: '创意生成阶段',
+    2: '技术可行性分析阶段',
+    3: '缺点讨论阶段'
+  };
+  return titles[currentStage.value as keyof typeof titles] || '未知阶段';
+};
+
+const getCurrentStageDescription = () => {
+  const descriptions = {
+    1: '在这个阶段，各个代理将从自己的专业角度出发，专注于创意想法和概念设计，为文创产品提供创新的设计理念。',
+    2: '在这个阶段，代理们将分析技术实现的可行性，评估所需资源、技术难度和实现方案。',
+    3: '在这个阶段，代理们将识别产品设计中的潜在问题，讨论可能的缺点并提出改进建议。'
+  };
+  return descriptions[currentStage.value as keyof typeof descriptions] || '';
+};
+
+const getStageColor = (stage: number) => {
+  const colors = {
+    1: '#1890ff',
+    2: '#52c41a', 
+    3: '#faad14'
+  };
+  return colors[stage as keyof typeof colors] || '#1890ff';
+};
+
+const getStageProgress = () => {
+  if (selectedAgents.value.length === 0) return 0;
+  const completedCount = selectedAgents.value.filter(agentId => 
+    agentStatuses.value[agentId] === 'completed'
+  ).length;
+  return Math.round((completedCount / selectedAgents.value.length) * 100);
+};
+
+const getAgentColor = (roleType: string) => {
+  const colors: Record<string, string> = {
+    'UI/UX Designer': '#1890ff',
+    'Software Engineer': '#52c41a',
+    'Product Manager': '#722ed1',
+    'Market Analyst': '#fa8c16',
+    'User Researcher': '#eb2f96'
+  };
+  return colors[roleType] || '#1890ff';
+};
+
+const getAgentDescription = (roleType: string) => {
+  const descriptions: Record<string, string> = {
+    'UI/UX Designer': '专注用户体验和界面设计',
+    'Software Engineer': '负责技术架构和实现方案',
+    'Product Manager': '从商业角度分析需求',
+    'Market Analyst': '分析市场趋势和竞争环境',
+    'User Researcher': '专业的用户行为分析'
+  };
+  return descriptions[roleType] || '专业分析师';
+};
+
+const toggleAgent = (agentId: number) => {
+  const index = selectedAgents.value.indexOf(agentId);
+  if (index > -1) {
+    selectedAgents.value.splice(index, 1);
+  } else {
+    selectedAgents.value.push(agentId);
+  }
+};
+
+const getSelectedAgents = () => {
+  return availableAgents.value.filter(agent => 
+    selectedAgents.value.includes(agent.id)
+  );
 };
 
 const getAgentStatus = (agentId: number) => {
   return agentStatuses.value[agentId] || 'idle';
 };
 
+const getAgentStatusText = (agentId: number) => {
+  const status = getAgentStatus(agentId);
+  const texts = {
+    'idle': '等待中',
+    'thinking': '思考中...',
+    'completed': '已完成'
+  };
+  return texts[status] || status;
+};
+
 const getAgentResult = (agentId: number) => {
-  return realTimeResults.value[agentId] || null;
+  return agentResults.value[agentId];
 };
 
-const getAgentThinkingProgress = (agentId: number) => {
-  return agentThinkingProgress.value[agentId] || null;
+const formatTime = (time: Date | null) => {
+  if (!time) return '';
+  return time.toLocaleString('zh-CN');
 };
 
-const getAgentEstimatedTime = (agentId: number) => {
-  return agentEstimatedTimes.value[agentId] || null;
-};
-
-const getAgentError = (agentId: number) => {
-  return agentErrors.value[agentId] || null;
-};
-
-const getCurrentStageName = (): string => {
-  if (!stageProgress.value) return '';
-  return stageProgress.value.stages[stageProgress.value.current - 1] || '';
-};
-
-const canPerformAction = brainstorm.canPerformAction;
-
-// WebSocket事件处理
-const setupSocketListeners = () => {
-  if (!socket.isConnected.value) return;
-
-  // 监听代理状态更新
-  socket.on('agent:status-update', (data: {
-    sessionId: number;
-    agentId: number;
-    status: import('@/types/agent').AgentRuntimeStatus;
-  }) => {
-    if (data.sessionId === sessionId.value) {
-      brainstorm.agentStatuses.value[data.agentId] = data.status;
-    }
-  });
-
-  // 监听代理思考进度
-  socket.on('agent:thinking-progress', (data: {
-    sessionId: number;
-    agentId: number;
-    progress: number;
-  }) => {
-    if (data.sessionId === sessionId.value) {
-      agentThinkingProgress.value[data.agentId] = data.progress;
-    }
-  });
-
-  // 监听代理结果
-  socket.on('agent:result', (data: {
-    sessionId: number;
-    agentId: number;
-    result: AgentResult;
-  }) => {
-    if (data.sessionId === sessionId.value) {
-      brainstorm.realTimeResults.value[data.agentId] = data.result;
-      brainstorm.agentStatuses.value[data.agentId] = 'completed';
-    }
-  });
-
-  // 监听代理错误
-  socket.on('agent:error', (data: {
-    sessionId: number;
-    agentId: number;
-    error: string;
-  }) => {
-    if (data.sessionId === sessionId.value) {
-      agentErrors.value[data.agentId] = data.error;
-      brainstorm.agentStatuses.value[data.agentId] = 'error';
-    }
-  });
-
-  // 监听阶段开始
-  socket.on('stage:started', (data: {
-    sessionId: number;
-    stage: number;
-    stageName: string;
-  }) => {
-    if (data.sessionId === sessionId.value) {
-      currentStageStartTime.value = new Date().toISOString();
-      currentStageProgress.value = 0;
-      message.info(`${data.stageName} 已开始`);
-    }
-  });
-
-  // 监听阶段进度
-  socket.on('stage:progress', (data: {
-    sessionId: number;
-    stage: number;
-    progress: number;
-  }) => {
-    if (data.sessionId === sessionId.value) {
-      currentStageProgress.value = data.progress;
-    }
-  });
-
-  // 监听阶段完成
-  socket.on('stage:completed', (data: {
-    sessionId: number;
-    stage: number;
-    summary: AISummary;
-  }) => {
-    if (data.sessionId === sessionId.value) {
-      currentStageProgress.value = 100;
-      message.success(`第${data.stage}阶段已完成`);
-    }
-  });
-
-  // 监听会话完成
-  socket.on('session:completed', (data: {
-    sessionId: number;
-    finalReport: import('@/types/brainstorm').FinalReport;
-  }) => {
-    if (data.sessionId === sessionId.value) {
-      message.success('头脑风暴会话已完成！');
-    }
-  });
-
-  // 监听会话错误
-  socket.on('session:error', (data: {
-    sessionId: number;
-    error: string;
-  }) => {
-    if (data.sessionId === sessionId.value) {
-      message.error(`会话错误: ${data.error}`);
-    }
-  });
-
-  // 监听系统通知
-  socket.on('system:notification', (data: {
-    type: 'info' | 'warning' | 'error';
-    message: string;
-  }) => {
-    switch (data.type) {
-      case 'info':
-        message.info(data.message);
-        break;
-      case 'warning':
-        message.warning(data.message);
-        break;
-      case 'error':
-        message.error(data.message);
-        break;
-    }
-  });
-
-  // 监听状态同步响应
-  socket.on('session:sync-response', (data: {
-    sessionId: number;
-    agentStatuses: Record<number, import('@/types/agent').AgentRuntimeStatus>;
-    agentResults: Record<number, AgentResult>;
-    stageProgress: number;
-  }) => {
-    if (data.sessionId === sessionId.value) {
-      // 同步代理状态
-      brainstorm.syncAgentStatuses(data.agentStatuses);
-      
-      // 同步代理结果
-      brainstorm.syncAgentResults(data.agentResults);
-      
-      // 同步阶段进度
-      if (currentSession.value?.currentPhase) {
-        brainstorm.updateStageProgress(currentSession.value.currentPhase, data.stageProgress);
-      }
-      
-      console.log('状态同步完成');
-    }
-  });
-
-  // 监听网络质量变化
-  socket.on('network:quality', (data: {
-    latency: number;
-    quality: 'excellent' | 'good' | 'fair' | 'poor';
-  }) => {
-    // 可以根据网络质量调整UI显示
-    if (data.quality === 'poor') {
-      message.warning('网络连接质量较差，可能影响实时更新');
-    }
-  });
-};
-
-const cleanupSocketListeners = () => {
-  if (!socket.isConnected.value) return;
-
-  socket.off('agent:status-update');
-  socket.off('agent:thinking-progress');
-  socket.off('agent:result');
-  socket.off('agent:error');
-  socket.off('stage:started');
-  socket.off('stage:progress');
-  socket.off('stage:completed');
-  socket.off('session:completed');
-  socket.off('session:error');
-  socket.off('system:notification');
-  socket.off('session:sync-response');
-  socket.off('network:quality');
-};
-
-// 事件处理
-const handleReconnect = async () => {
-  try {
-    await socket.connect();
-    if (socket.isConnected.value) {
-      socket.joinRoom(sessionId.value);
-      setupSocketListeners();
-      message.success('重新连接成功');
-    }
-  } catch (error) {
-    message.error('重新连接失败');
+// 核心业务方法
+const startSession = async () => {
+  if (!canStartSession.value) {
+    message.error('请输入主题并选择至少一个代理');
+    return;
   }
-};
 
-const handleStartSession = async () => {
+  isStarting.value = true;
   try {
-    await brainstorm.startSession(sessionId.value);
-  } catch (error: any) {
-    message.error(error.message || '启动会话失败');
-  }
-};
-
-const handlePauseSession = async () => {
-  try {
-    await brainstorm.pauseSession(sessionId.value);
-    message.success('会话已暂停');
-  } catch (error: any) {
-    message.error(error.message || '暂停会话失败');
-  }
-};
-
-const handleResumeSession = async () => {
-  try {
-    await brainstorm.resumeSession(sessionId.value);
-    message.success('会话已恢复');
-  } catch (error: any) {
-    message.error(error.message || '恢复会话失败');
-  }
-};
-
-const handleStopSession = async () => {
-  Modal.confirm({
-    title: '确认停止会话',
-    content: '确定要停止当前会话吗？停止后无法恢复。',
-    onOk: async () => {
-      try {
-        await brainstorm.stopSession(sessionId.value);
-        message.success('会话已停止');
-      } catch (error: any) {
-        message.error(error.message || '停止会话失败');
-      }
-    },
-  });
-};
-
-const handleProceedToNext = async () => {
-  try {
-    await brainstorm.proceedToNextStage();
-  } catch (error: any) {
-    message.error(error.message || '进入下一阶段失败');
-  }
-};
-
-const handleRestartStage = async () => {
-  try {
-    await brainstorm.restartCurrentStage();
-    // 清除当前阶段的进度和错误状态
-    currentStageProgress.value = 0;
-    agentThinkingProgress.value = {};
-    agentErrors.value = {};
-  } catch (error: any) {
-    message.error(error.message || '重新开始阶段失败');
-  }
-};
-
-const handleGenerateFinalReport = async () => {
-  try {
-    if (currentSession.value) {
-      await brainstorm.fetchFinalReport(currentSession.value.id);
-      message.success('最终报告已生成');
-    }
-  } catch (error: any) {
-    message.error(error.message || '生成最终报告失败');
-  }
-};
-
-const handleViewAgentDetails = (result: AgentResult) => {
-  // 代理详情查看逻辑已在 AgentThinkingPanel 组件中实现
-};
-
-const handleRetryAgent = async (agentId: number) => {
-  // 清除该代理的错误状态
-  delete agentErrors.value[agentId];
-  delete agentThinkingProgress.value[agentId];
-  
-  // 通过WebSocket请求重试
-  if (socket.isConnected.value) {
-    socket.emit('agent:retry', {
-      sessionId: sessionId.value,
-      agentId,
+    sessionStatus.value = 'ACTIVE';
+    sessionStartTime.value = new Date();
+    currentStage.value = 1;
+    
+    // 初始化代理状态
+    selectedAgents.value.forEach(agentId => {
+      agentStatuses.value[agentId] = 'idle';
+      agentResults.value[agentId] = null;
     });
+    
+    message.success('头脑风暴会话已开始！');
+    
+    // 开始第一阶段
+    await startCurrentStage();
+    
+  } catch (error: any) {
+    message.error('启动会话失败: ' + (error.message || '未知错误'));
+    sessionStatus.value = 'IDLE';
+  } finally {
+    isStarting.value = false;
   }
 };
 
-const handleSkipAgent = async (agentId: number) => {
-  Modal.confirm({
-    title: '确认跳过代理',
-    content: '确定要跳过此代理吗？跳过后该代理将不参与当前阶段。',
-    onOk: () => {
-      if (socket.isConnected.value) {
-        socket.emit('agent:skip', {
-          sessionId: sessionId.value,
-          agentId,
-        });
+const startCurrentStage = async () => {
+  stageSummary.value = null;
+  
+  // 重置代理状态
+  selectedAgents.value.forEach(agentId => {
+    agentStatuses.value[agentId] = 'thinking';
+    agentResults.value[agentId] = null;
+  });
+  
+  // 模拟代理思考过程
+  for (const agentId of selectedAgents.value) {
+    simulateAgentThinking(agentId);
+  }
+};
+
+const simulateAgentThinking = async (agentId: number) => {
+  const agent = availableAgents.value.find(a => a.id === agentId);
+  if (!agent) return;
+  
+  // 模拟思考时间
+  const thinkingTime = Math.random() * 3000 + 2000; // 2-5秒
+  
+  await new Promise(resolve => setTimeout(resolve, thinkingTime));
+  
+  // 生成模拟结果
+  const result = generateMockResult(agent, currentStage.value, sessionTopic.value);
+  agentResults.value[agentId] = result;
+  agentStatuses.value[agentId] = 'completed';
+  
+  // 检查是否所有代理都完成了
+  if (allAgentsCompleted.value) {
+    await generateStageSummary();
+  }
+};
+
+const generateMockResult = (agent: any, stage: number, topic: string) => {
+  const stagePrompts = {
+    1: { // 创意生成
+      'UI/UX Designer': {
+        mainPoint: `从设计角度看，${topic}需要注重视觉美感和用户体验的结合。`,
+        analysis: `考虑到文创产品的特殊性，设计应该体现文化内涵的同时保持现代感。建议采用简洁而富有文化特色的设计语言，通过色彩、图案和材质的巧妙运用来传达文化价值。`,
+        suggestions: [
+          '采用传统文化元素与现代设计相结合的方式',
+          '注重产品的视觉层次和信息传达',
+          '考虑不同用户群体的审美偏好',
+          '确保设计的可实现性和生产可行性'
+        ]
+      },
+      'Software Engineer': {
+        mainPoint: `从技术实现角度，${topic}需要考虑生产工艺和材料特性。`,
+        analysis: `技术实现需要平衡创意设计与生产成本。建议采用成熟的生产工艺，同时预留创新空间。需要考虑产品的耐用性、安全性和环保要求。`,
+        suggestions: [
+          '选择合适的生产工艺和材料',
+          '确保产品质量和安全标准',
+          '优化生产流程降低成本',
+          '考虑产品的可持续性和环保性'
+        ]
+      },
+      'Product Manager': {
+        mainPoint: `从产品角度，${topic}需要明确目标用户和市场定位。`,
+        analysis: `产品策略应该基于市场需求和用户痛点。建议进行深入的用户研究，了解目标群体的需求和偏好，制定差异化的产品策略。`,
+        suggestions: [
+          '明确产品的核心价值主张',
+          '定义清晰的目标用户画像',
+          '制定合理的产品定价策略',
+          '规划产品的功能优先级'
+        ]
       }
     },
-  });
+    2: { // 技术可行性分析
+      'UI/UX Designer': {
+        mainPoint: `设计方案在技术实现上具有较高的可行性。`,
+        analysis: `经过分析，当前的设计方案可以通过现有的生产工艺实现。但需要在某些细节上进行调整以适应生产要求。建议与生产团队密切合作，确保设计意图的准确传达。`,
+        suggestions: [
+          '简化复杂的设计元素以降低生产难度',
+          '选择适合批量生产的设计方案',
+          '预留设计调整的空间',
+          '建立设计与生产的沟通机制'
+        ]
+      },
+      'Software Engineer': {
+        mainPoint: `技术实现方案整体可行，但需要注意成本控制。`,
+        analysis: `从技术角度分析，产品的实现需要考虑材料成本、生产设备和工艺复杂度。建议采用标准化的生产流程，同时保持一定的定制化能力。`,
+        suggestions: [
+          '采用标准化的生产模块',
+          '优化材料使用效率',
+          '建立质量控制体系',
+          '考虑规模化生产的技术要求'
+        ]
+      },
+      'Product Manager': {
+        mainPoint: `产品在商业化方面具有良好的可行性。`,
+        analysis: `市场分析显示该产品有明确的需求和合理的盈利空间。建议制定分阶段的产品发布计划，先推出核心功能版本，再根据市场反馈进行迭代。`,
+        suggestions: [
+          '制定MVP版本的功能范围',
+          '建立用户反馈收集机制',
+          '规划产品的迭代路线图',
+          '评估市场推广的资源需求'
+        ]
+      }
+    },
+    3: { // 缺点讨论
+      'UI/UX Designer': {
+        mainPoint: `设计方案存在一些需要改进的地方。`,
+        analysis: `当前设计可能在某些用户群体中接受度不高，需要考虑更广泛的用户需求。另外，设计的复杂度可能会影响生产效率和成本控制。`,
+        suggestions: [
+          '简化设计复杂度以降低生产成本',
+          '增加设计的包容性和通用性',
+          '考虑不同文化背景用户的接受度',
+          '建立设计效果的验证机制'
+        ]
+      },
+      'Software Engineer': {
+        mainPoint: `技术实现存在一些潜在风险需要关注。`,
+        analysis: `生产过程中可能遇到质量控制难题，特别是在批量生产时保持一致性。另外，某些材料的供应稳定性也需要考虑。`,
+        suggestions: [
+          '建立严格的质量检测标准',
+          '寻找可靠的材料供应商',
+          '制定生产异常的应对预案',
+          '考虑技术方案的备选选项'
+        ]
+      },
+      'Product Manager': {
+        mainPoint: `产品策略需要应对一些市场挑战。`,
+        analysis: `市场竞争激烈，需要建立明确的差异化优势。另外，用户教育成本可能较高，需要制定有效的市场推广策略。`,
+        suggestions: [
+          '强化产品的独特价值主张',
+          '制定有效的用户教育策略',
+          '建立品牌认知和用户忠诚度',
+          '准备应对竞争对手的策略'
+        ]
+      }
+    }
+  };
+  
+  const roleType = agent.roleType;
+  const stageData = stagePrompts[stage as keyof typeof stagePrompts];
+  const agentData = stageData[roleType as keyof typeof stageData];
+  
+  return agentData || {
+    mainPoint: `从${roleType}角度分析${topic}`,
+    analysis: '正在进行深入分析...',
+    suggestions: ['建议1', '建议2', '建议3']
+  };
 };
 
-const handleCopyAgentResult = (result: AgentResult) => {
-  // 复制逻辑已在 AgentThinkingPanel 组件中实现
+const generateStageSummary = async () => {
+  // 模拟生成阶段总结
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  
+  const summaries = {
+    1: {
+      keyPoints: [
+        '所有代理都认为创意设计需要平衡传统文化与现代审美',
+        '技术实现的可行性得到了初步确认',
+        '产品定位和目标用户群体已基本明确'
+      ],
+      commonSuggestions: [
+        '采用传统与现代相结合的设计理念',
+        '注重用户体验和实用性',
+        '考虑生产成本和市场接受度'
+      ],
+      conflictingViews: [],
+      overallAssessment: '创意生成阶段进展顺利，各代理提出了富有建设性的创意方案，为后续的技术分析奠定了良好基础。'
+    },
+    2: {
+      keyPoints: [
+        '技术实现方案整体可行，但需要注意成本控制',
+        '生产工艺和材料选择需要进一步优化',
+        '质量控制体系的建立至关重要'
+      ],
+      commonSuggestions: [
+        '采用标准化生产流程降低成本',
+        '建立完善的质量控制机制',
+        '选择可靠的供应链合作伙伴'
+      ],
+      conflictingViews: [
+        '在材料选择上存在成本与质量的权衡分歧'
+      ],
+      overallAssessment: '技术可行性分析显示项目具有良好的实现前景，但需要在成本控制和质量保证之间找到平衡点。'
+    },
+    3: {
+      keyPoints: [
+        '识别出设计复杂度可能带来的生产挑战',
+        '市场竞争和用户教育是主要风险点',
+        '供应链稳定性需要重点关注'
+      ],
+      commonSuggestions: [
+        '简化设计以降低生产风险',
+        '制定有效的市场推广策略',
+        '建立风险应对预案'
+      ],
+      conflictingViews: [
+        '在设计简化程度上存在不同观点'
+      ],
+      overallAssessment: '通过缺点讨论，识别了项目的主要风险点，为制定改进方案和风险应对策略提供了重要参考。'
+    }
+  };
+  
+  stageSummary.value = summaries[currentStage.value as keyof typeof summaries];
+  message.success(`第${currentStage.value}阶段总结已生成`);
 };
 
-const handleExportAgentResult = (result: AgentResult) => {
-  // 导出逻辑可以在这里实现或委托给其他服务
-  message.info('导出功能开发中...');
-};
-
-const handleExportStageResults = (results: AgentResult[]) => {
-  message.info('导出阶段结果功能开发中...');
-};
-
-const handleViewDetailedResults = (results: AgentResult[]) => {
-  message.info('查看详细结果功能开发中...');
-};
-
-const handleExportFinalReport = () => {
-  message.info('导出最终报告功能开发中...');
-};
-
-const handleRetryLoad = async () => {
+const retryCurrentStage = async () => {
+  isRetrying.value = true;
   try {
-    await brainstorm.loadSession(sessionId.value);
-  } catch (error: any) {
-    message.error(error.message || '重新加载失败');
+    message.info('正在重新进行当前阶段...');
+    await startCurrentStage();
+  } finally {
+    isRetrying.value = false;
   }
 };
 
-const handleRefreshPage = () => {
-  window.location.reload();
+const proceedToNextStage = async () => {
+  isProceeding.value = true;
+  try {
+    if (currentStage.value < 3) {
+      currentStage.value++;
+      message.success(`进入第${currentStage.value}阶段`);
+      await startCurrentStage();
+    } else {
+      // 生成最终报告
+      sessionStatus.value = 'COMPLETED';
+      message.success('头脑风暴完成！正在生成最终报告...');
+    }
+  } finally {
+    isProceeding.value = false;
+  }
+};
+
+const stopSession = async () => {
+  isStopping.value = true;
+  try {
+    sessionStatus.value = 'IDLE';
+    currentStage.value = 1;
+    stageSummary.value = null;
+    message.info('会话已停止');
+  } finally {
+    isStopping.value = false;
+  }
+};
+
+const viewFinalReport = () => {
+  message.info('正在跳转到最终报告页面...');
+  // TODO: 实现跳转到报告页面
+};
+
+const exportReport = () => {
+  message.success('报告导出功能开发中...');
+  // TODO: 实现报告导出功能
+};
+
+const startNewSession = () => {
+  sessionStatus.value = 'IDLE';
+  sessionTopic.value = '';
+  sessionStartTime.value = null;
+  currentStage.value = 1;
+  selectedAgents.value = [];
+  agentStatuses.value = {};
+  agentResults.value = {};
+  stageSummary.value = null;
+  message.info('已重置，可以开始新的头脑风暴会话');
+};
+
+const saveSettings = () => {
+  message.success('设置已保存');
+  showSettings.value = false;
 };
 
 // 生命周期
 onMounted(async () => {
   try {
-    // 加载代理列表
-    await agents.fetchAgents();
-    
-    // 加载会话
-    await brainstorm.loadSession(sessionId.value);
-    
-    // 连接WebSocket
-    await socket.connect();
-    
-    if (socket.isConnected.value) {
-      // 加入会话房间
-      socket.joinRoom(sessionId.value);
-      
-      // 设置事件监听器
-      setupSocketListeners();
-    }
-  } catch (error: any) {
+    await fetchAgents();
+    message.success('欢迎使用AI头脑风暴平台！');
+  } catch (error) {
     console.error('初始化失败:', error);
-  }
-});
-
-onUnmounted(() => {
-  // 清理WebSocket监听器
-  cleanupSocketListeners();
-  
-  // 离开会话房间
-  if (socket.isConnected.value) {
-    socket.leaveRoom(sessionId.value);
-  }
-  
-  // 断开WebSocket连接
-  socket.disconnect();
-});
-
-// 监听连接状态变化
-watch(() => socket.isConnected.value, async (connected, wasConnected) => {
-  if (connected && wasConnected === false) {
-    // 重新连接后的处理
-    try {
-      // 重新加入房间
-      socket.joinRoom(sessionId.value);
-      
-      // 重新设置监听器
-      setupSocketListeners();
-      
-      // 同步会话状态
-      if (currentSession.value) {
-        await brainstorm.syncSessionState(sessionId.value);
-        message.success('状态已同步');
-      }
-      
-      // 请求服务器同步当前状态
-      if (socket.isConnected.value) {
-        socket.emit('session:sync-request', {
-          sessionId: sessionId.value,
-        });
-      }
-    } catch (error: any) {
-      console.error('重连后同步失败:', error);
-      message.warning('重连成功，但状态同步失败');
-    }
-  } else if (!connected) {
-    // 连接断开时清理监听器
-    cleanupSocketListeners();
+    message.error('初始化失败，请刷新页面重试');
   }
 });
 </script>
 
 <style scoped lang="scss">
-.brainstorm-session-page {
+@import '@/styles/responsive.scss';
+@import '@/styles/utilities.scss';
+
+.brainstorm-session {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
   padding: 24px;
-  max-width: 1400px;
-  margin: 0 auto;
+}
 
-  .network-status-bar {
-    position: fixed;
-    top: 16px;
-    right: 16px;
-    z-index: 1000;
-    background: rgba(255, 255, 255, 0.9);
-    backdrop-filter: blur(8px);
-    border-radius: 8px;
-    padding: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  }
-
-  .connection-status {
-    margin-bottom: 24px;
-
-    .connection-alert {
-      border-radius: 8px;
-    }
-  }
-
-  .session-header {
+.session-header {
+  margin-bottom: 24px;
+  
+  .header-content {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 32px;
-    padding: 24px;
-    background: #fff;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-
-    .session-info {
-      flex: 1;
-
-      .session-title {
-        margin: 0 0 12px 0;
-        font-size: 24px;
-        font-weight: 600;
-        color: #262626;
-      }
-
-      .session-meta {
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        flex-wrap: wrap;
-
-        .session-topic {
-          color: #595959;
-          font-weight: 500;
-        }
-
-        .session-time {
-          color: #8c8c8c;
-          font-size: 14px;
-        }
-      }
-    }
-
-    .session-actions {
-      flex-shrink: 0;
-    }
-  }
-
-  .progress-section {
-    margin-bottom: 32px;
-  }
-
-  .agents-section {
-    margin-bottom: 32px;
-
-    .section-title {
-      margin: 0 0 16px 0;
-      font-size: 18px;
-      font-weight: 600;
-      color: #262626;
-    }
-
-    .agents-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+    margin-bottom: 24px;
+    
+    @include mobile-only {
+      flex-direction: column;
       gap: 16px;
     }
   }
-
-  .summary-section {
-    margin-bottom: 32px;
-  }
-
-  .final-report-section {
-    margin-bottom: 32px;
-  }
-
-  .loading-overlay {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    min-height: 400px;
-    gap: 16px;
-
-    .loading-text {
-      color: #8c8c8c;
-      font-size: 16px;
+  
+  .session-info {
+    flex: 1;
+    
+    .session-title {
+      margin: 0 0 8px 0;
+      font-size: 1.8rem;
+      font-weight: 600;
+      color: #1890ff;
+    }
+    
+    .session-meta {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      
+      .session-time {
+        color: #666;
+        font-size: 0.9rem;
+      }
     }
   }
-
-  .error-section {
-    margin-top: 48px;
+  
+  .progress-section {
+    background: white;
+    padding: 24px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   }
 }
 
-// 响应式设计
-@media (max-width: 1200px) {
-  .brainstorm-session-page {
-    .agents-section .agents-grid {
-      grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+.session-content {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.setup-section {
+  .setup-card {
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+  
+  .agents-selection {
+    .agents-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    
+    .agent-card {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px;
+      border: 2px solid #f0f0f0;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      position: relative;
+      
+      &:hover {
+        border-color: #1890ff;
+        box-shadow: 0 2px 8px rgba(24, 144, 255, 0.2);
+      }
+      
+      &.selected {
+        border-color: #1890ff;
+        background-color: #f6ffed;
+      }
+      
+      .agent-info {
+        flex: 1;
+        
+        h4 {
+          margin: 0 0 4px 0;
+          font-size: 1rem;
+        }
+        
+        p {
+          margin: 0 0 8px 0;
+          color: #666;
+          font-size: 0.9rem;
+        }
+        
+        .agent-description {
+          font-size: 0.8rem;
+          color: #999;
+        }
+      }
+      
+      .selection-indicator {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        color: #1890ff;
+        font-size: 1.2rem;
+      }
+    }
+    
+    .selection-summary {
+      text-align: center;
+      color: #666;
+      font-size: 0.9rem;
     }
   }
+}
+
+.active-session {
+  .stage-info-card {
+    margin-bottom: 24px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    
+    .stage-info {
+      .stage-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+        
+        h2 {
+          margin: 0;
+          color: #1890ff;
+        }
+      }
+      
+      .stage-description {
+        color: #666;
+        line-height: 1.6;
+        margin-bottom: 16px;
+      }
+    }
+  }
+  
+  .agents-section {
+    margin-bottom: 24px;
+    
+    h3 {
+      margin-bottom: 16px;
+      color: #333;
+    }
+    
+    .agent-status-card {
+      border-radius: 8px;
+      transition: all 0.3s ease;
+      
+      &.completed {
+        border-color: #52c41a;
+        box-shadow: 0 2px 8px rgba(82, 196, 26, 0.2);
+      }
+      
+      .agent-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
+        
+        .agent-info {
+          flex: 1;
+          
+          h4 {
+            margin: 0 0 4px 0;
+          }
+          
+          .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.9rem;
+            color: #666;
+          }
+        }
+      }
+      
+      .agent-result {
+        .result-content {
+          .result-section {
+            margin-bottom: 16px;
+            
+            h5 {
+              margin: 0 0 8px 0;
+              color: #1890ff;
+              font-size: 0.9rem;
+            }
+            
+            p {
+              margin: 0 0 8px 0;
+              line-height: 1.6;
+              color: #333;
+            }
+            
+            ul {
+              margin: 0;
+              padding-left: 20px;
+              
+              li {
+                margin-bottom: 4px;
+                line-height: 1.5;
+              }
+            }
+          }
+        }
+      }
+      
+      .thinking-indicator {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #666;
+        font-size: 0.9rem;
+        padding: 12px 0;
+      }
+    }
+  }
+  
+  .stage-summary {
+    .summary-card {
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+    
+    .summary-content {
+      .summary-section {
+        margin-bottom: 24px;
+        
+        h4 {
+          margin: 0 0 12px 0;
+          color: #1890ff;
+          font-size: 1.1rem;
+        }
+        
+        ul {
+          margin: 0;
+          padding-left: 20px;
+          
+          li {
+            margin-bottom: 8px;
+            line-height: 1.6;
+          }
+        }
+        
+        p {
+          margin: 0;
+          line-height: 1.6;
+          color: #333;
+        }
+      }
+    }
+    
+    .summary-actions {
+      margin-top: 24px;
+      text-align: center;
+    }
+  }
+}
+
+.completed-session {
+  text-align: center;
+  padding: 48px 24px;
+}
+
+.setting-description {
+  font-size: 0.8rem;
+  color: #999;
+  margin-top: 4px;
 }
 
 @media (max-width: 768px) {
-  .brainstorm-session-page {
+  .brainstorm-session {
     padding: 16px;
-
-    .session-header {
-      flex-direction: column;
-      gap: 16px;
-      align-items: stretch;
-
-      .session-actions {
-        align-self: stretch;
-
-        :deep(.ant-space) {
-          width: 100%;
-          justify-content: center;
-        }
-      }
-    }
-
-    .agents-section .agents-grid {
-      grid-template-columns: 1fr;
-    }
   }
-}
-
-@media (max-width: 576px) {
-  .brainstorm-session-page {
-    .session-header .session-info .session-meta {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 8px;
-    }
+  
+  .session-header .session-info .session-title {
+    font-size: 1.4rem;
+  }
+  
+  .agents-selection .agents-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

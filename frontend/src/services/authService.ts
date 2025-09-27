@@ -1,5 +1,6 @@
 import { ApiService } from './api';
 import { handleError, type ErrorContext } from './errorHandler';
+import { isMockEnabled } from '@/utils/mockEnabler';
 import type { 
   LoginCredentials, 
   RegisterData, 
@@ -19,6 +20,12 @@ export class AuthService {
    */
   static async login(credentials: LoginCredentials): Promise<AuthResponse> {
     try {
+      // 如果启用了Mock模式，使用Mock服务
+      if (isMockEnabled()) {
+        const { AuthService: MockAuthService } = await import('./__mocks__/authService');
+        return await MockAuthService.login(credentials);
+      }
+      
       return await ApiService.post<AuthResponse>('/users/login', credentials);
     } catch (error) {
       const context: ErrorContext = {
@@ -35,6 +42,12 @@ export class AuthService {
    */
   static async register(userData: RegisterData): Promise<RegisterResponse> {
     try {
+      // 如果启用了Mock模式，使用Mock服务
+      if (isMockEnabled()) {
+        const { AuthService: MockAuthService } = await import('./__mocks__/authService');
+        return await MockAuthService.register(userData);
+      }
+      
       // Convert to backend-compatible format (remove email for now)
       const backendData: BackendRegisterData = {
         username: userData.username,
@@ -56,6 +69,12 @@ export class AuthService {
    */
   static async getCurrentUser(): Promise<User> {
     try {
+      // 如果启用了Mock模式，使用Mock服务
+      if (isMockEnabled()) {
+        const { AuthService: MockAuthService } = await import('./__mocks__/authService');
+        return await MockAuthService.getCurrentUser();
+      }
+      
       return await ApiService.get<User>('/users/me');
     } catch (error) {
       const context: ErrorContext = {
@@ -71,6 +90,12 @@ export class AuthService {
    */
   static async logout(): Promise<void> {
     try {
+      // 如果启用了Mock模式，使用Mock服务
+      if (isMockEnabled()) {
+        const { AuthService: MockAuthService } = await import('./__mocks__/authService');
+        return await MockAuthService.logout();
+      }
+      
       return await ApiService.post<void>('/users/logout');
     } catch (error) {
       const context: ErrorContext = {

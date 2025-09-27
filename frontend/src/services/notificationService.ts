@@ -1,5 +1,4 @@
-import { ElMessage, ElNotification, ElMessageBox } from 'element-plus';
-import type { MessageOptions, NotificationOptions } from 'element-plus';
+import { message, notification, Modal } from 'ant-design-vue';
 
 export interface NotificationConfig {
   title?: string;
@@ -7,7 +6,6 @@ export interface NotificationConfig {
   type?: 'success' | 'warning' | 'info' | 'error';
   duration?: number;
   showClose?: boolean;
-  dangerouslyUseHTMLString?: boolean;
 }
 
 export interface ConfirmConfig {
@@ -24,126 +22,62 @@ export interface ConfirmConfig {
  */
 export class NotificationService {
   private static messageQueue: Array<() => void> = [];
-  private static isProcessing = false;
   private static maxConcurrentMessages = 3;
   private static currentMessageCount = 0;
 
   /**
    * 显示成功消息
    */
-  static success(message: string, duration: number = 3000) {
-    this.showMessage({
-      message,
-      type: 'success',
-      duration,
-    });
+  static success(msg: string, duration: number = 3) {
+    message.success(msg, duration);
   }
 
   /**
    * 显示警告消息
    */
-  static warning(message: string, duration: number = 4000) {
-    this.showMessage({
-      message,
-      type: 'warning',
-      duration,
-    });
+  static warning(msg: string, duration: number = 4) {
+    message.warning(msg, duration);
   }
 
   /**
    * 显示信息消息
    */
-  static info(message: string, duration: number = 3000) {
-    this.showMessage({
-      message,
-      type: 'info',
-      duration,
-    });
+  static info(msg: string, duration: number = 3) {
+    message.info(msg, duration);
   }
 
   /**
    * 显示错误消息
    */
-  static error(message: string, duration: number = 5000) {
-    this.showMessage({
-      message,
-      type: 'error',
-      duration,
-    });
+  static error(msg: string, duration: number = 5) {
+    message.error(msg, duration);
   }
 
   /**
    * 显示加载消息
    */
-  static loading(message: string = '加载中...') {
-    return ElMessage({
-      message,
-      type: 'info',
-      duration: 0,
-      showClose: true,
-      iconClass: 'el-icon-loading',
-    });
-  }
-
-  /**
-   * 显示消息（带队列管理）
-   */
-  private static showMessage(config: NotificationConfig) {
-    const messageAction = () => {
-      this.currentMessageCount++;
-      
-      const messageInstance = ElMessage({
-        ...config,
-        onClose: () => {
-          this.currentMessageCount--;
-          this.processMessageQueue();
-        },
-      });
-
-      return messageInstance;
-    };
-
-    if (this.currentMessageCount >= this.maxConcurrentMessages) {
-      this.messageQueue.push(messageAction);
-    } else {
-      messageAction();
-    }
-  }
-
-  /**
-   * 处理消息队列
-   */
-  private static processMessageQueue() {
-    if (this.messageQueue.length > 0 && this.currentMessageCount < this.maxConcurrentMessages) {
-      const nextMessage = this.messageQueue.shift();
-      if (nextMessage) {
-        nextMessage();
-      }
-    }
+  static loading(msg: string = '加载中...') {
+    return message.loading(msg, 0);
   }
 
   /**
    * 显示通知
    */
   static notify(config: NotificationConfig) {
-    return ElNotification({
-      title: config.title,
-      message: config.message,
-      type: config.type || 'info',
-      duration: config.duration || 4500,
-      showClose: config.showClose !== false,
-      dangerouslyUseHTMLString: config.dangerouslyUseHTMLString || false,
+    return notification[config.type || 'info']({
+      message: config.title || '通知',
+      description: config.message,
+      duration: config.duration || 4.5,
     });
   }
 
   /**
    * 显示成功通知
    */
-  static notifySuccess(title: string, message: string, duration: number = 4000) {
-    return this.notify({
-      title,
-      message,
-      type: 'success',
+  static notifySuccess(title: string, msg: string, duration: number = 4) {
+    return notification.success({
+      message: title,
+      description: msg,
       duration,
     });
   }
@@ -151,11 +85,10 @@ export class NotificationService {
   /**
    * 显示警告通知
    */
-  static notifyWarning(title: string, message: string, duration: number = 5000) {
-    return this.notify({
-      title,
-      message,
-      type: 'warning',
+  static notifyWarning(title: string, msg: string, duration: number = 5) {
+    return notification.warning({
+      message: title,
+      description: msg,
       duration,
     });
   }
@@ -163,11 +96,10 @@ export class NotificationService {
   /**
    * 显示错误通知
    */
-  static notifyError(title: string, message: string, duration: number = 6000) {
-    return this.notify({
-      title,
-      message,
-      type: 'error',
+  static notifyError(title: string, msg: string, duration: number = 6) {
+    return notification.error({
+      message: title,
+      description: msg,
       duration,
     });
   }
@@ -175,11 +107,10 @@ export class NotificationService {
   /**
    * 显示信息通知
    */
-  static notifyInfo(title: string, message: string, duration: number = 4000) {
-    return this.notify({
-      title,
-      message,
-      type: 'info',
+  static notifyInfo(title: string, msg: string, duration: number = 4) {
+    return notification.info({
+      message: title,
+      description: msg,
       duration,
     });
   }
@@ -188,30 +119,29 @@ export class NotificationService {
    * 显示确认对话框
    */
   static async confirm(config: ConfirmConfig): Promise<boolean> {
-    try {
-      await ElMessageBox.confirm(
-        config.message,
-        config.title || '确认操作',
-        {
-          confirmButtonText: config.confirmButtonText || '确定',
-          cancelButtonText: config.cancelButtonText || '取消',
-          type: config.type || 'warning',
-          showCancelButton: config.showCancelButton !== false,
-        }
-      );
-      return true;
-    } catch {
-      return false;
-    }
+    return new Promise((resolve) => {
+      Modal.confirm({
+        title: config.title || '确认操作',
+        content: config.message,
+        okText: config.confirmButtonText || '确定',
+        cancelText: config.cancelButtonText || '取消',
+        onOk() {
+          resolve(true);
+        },
+        onCancel() {
+          resolve(false);
+        },
+      });
+    });
   }
 
   /**
    * 显示警告确认对话框
    */
-  static async confirmWarning(message: string, title: string = '警告'): Promise<boolean> {
+  static async confirmWarning(msg: string, title: string = '警告'): Promise<boolean> {
     return this.confirm({
       title,
-      message,
+      message: msg,
       type: 'warning',
     });
   }
@@ -230,31 +160,11 @@ export class NotificationService {
   }
 
   /**
-   * 显示输入对话框
-   */
-  static async prompt(
-    message: string,
-    title: string = '请输入',
-    defaultValue: string = ''
-  ): Promise<string | null> {
-    try {
-      const { value } = await ElMessageBox.prompt(message, title, {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        inputValue: defaultValue,
-      });
-      return value;
-    } catch {
-      return null;
-    }
-  }
-
-  /**
    * 显示操作成功反馈
    */
   static operationSuccess(operation: string, item?: string) {
-    const message = item ? `${operation}${item}成功` : `${operation}成功`;
-    this.success(message);
+    const msg = item ? `${operation}${item}成功` : `${operation}成功`;
+    this.success(msg);
   }
 
   /**
@@ -262,8 +172,8 @@ export class NotificationService {
    */
   static operationError(operation: string, item?: string, error?: string) {
     const baseMessage = item ? `${operation}${item}失败` : `${operation}失败`;
-    const message = error ? `${baseMessage}: ${error}` : baseMessage;
-    this.error(message);
+    const msg = error ? `${baseMessage}: ${error}` : baseMessage;
+    this.error(msg);
   }
 
   /**
@@ -271,7 +181,7 @@ export class NotificationService {
    */
   static networkStatusChange(isOnline: boolean) {
     if (isOnline) {
-      this.notifySuccess('网络连接', '网络连接已恢复', 3000);
+      this.notifySuccess('网络连接', '网络连接已恢复', 3);
     } else {
       this.notifyWarning('网络连接', '网络连接已断开，请检查网络设置', 0);
     }
@@ -282,11 +192,11 @@ export class NotificationService {
    */
   static saveStatus(success: boolean, autoSave: boolean = false) {
     if (success) {
-      const message = autoSave ? '已自动保存' : '保存成功';
-      this.success(message, 2000);
+      const msg = autoSave ? '已自动保存' : '保存成功';
+      this.success(msg, 2);
     } else {
-      const message = autoSave ? '自动保存失败' : '保存失败';
-      this.error(message);
+      const msg = autoSave ? '自动保存失败' : '保存失败';
+      this.error(msg);
     }
   }
 
@@ -295,18 +205,6 @@ export class NotificationService {
    */
   static copySuccess(content: string = '内容') {
     this.success(`${content}已复制到剪贴板`);
-  }
-
-  /**
-   * 显示上传进度通知
-   */
-  static uploadProgress(filename: string, progress: number) {
-    return this.notify({
-      title: '文件上传',
-      message: `正在上传 ${filename}... ${progress}%`,
-      type: 'info',
-      duration: 0,
-    });
   }
 
   /**
@@ -335,16 +233,8 @@ export class NotificationService {
    * 清除所有消息
    */
   static clearAll() {
-    ElMessage.closeAll();
-    this.messageQueue = [];
-    this.currentMessageCount = 0;
-  }
-
-  /**
-   * 设置最大并发消息数
-   */
-  static setMaxConcurrentMessages(count: number) {
-    this.maxConcurrentMessages = Math.max(1, count);
+    message.destroy();
+    notification.destroy();
   }
 }
 

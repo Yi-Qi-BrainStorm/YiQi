@@ -329,6 +329,9 @@ const formatDate = (dateString: string) => {
 </script>
 
 <style scoped lang="scss">
+@import '@/styles/responsive.scss';
+@import '@/styles/utilities.scss';
+
 .agent-card {
   position: relative;
   background-color: var(--color-surface);

@@ -1,6 +1,6 @@
-import axios, { AxiosError, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
+import axios, { AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios';
 import { API_BASE_URL, API_TIMEOUT } from '@/constants/api';
-import { ApiErrorHandler, AppError } from './errorHandler';
+import { ApiErrorHandler, type AppError } from './errorHandler';
 
 // 创建axios实例
 const api = axios.create({
