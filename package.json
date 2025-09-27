@@ -1,0 +1,23 @@
+{
+  "name": "ai-brainstorm-platform",
+  "version": "1.0.0",
+  "description": "AI头脑风暴文创产品设计平台",
+  "private": true,
+  "packageManager": "pnpm@8.15.0",
+  "scripts": {
+    "dev": "pnpm --filter frontend dev",
+    "build": "pnpm --filter frontend build",
+    "test": "pnpm --filter frontend test",
+    "lint": "pnpm --filter frontend lint",
+    "format": "pnpm --filter frontend format"
+  },
+  "keywords": [
+    "ai",
+    "brainstorm",
+    "vue3",
+    "typescript",
+    "creative-design"
+  ],
+  "author": "",
+  "license": "MIT"
+}
