@@ -1,8 +1,6 @@
 # 意启头脑风暴平台配置文件
 server:
   port: 8080
-  servlet:
-    context-path: /api
 
 spring:
   application:
@@ -13,7 +11,7 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3306/yiqi_brainstorm?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     username: ${DB_USERNAME:root}
-    password: ${DB_PASSWORD:mayuhao666.}
+    password: ${DB_PASSWORD:2054865827}
     hikari:
       maximum-pool-size: 20
       minimum-idle: 5
