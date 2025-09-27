@@ -14,3 +14,7 @@ export { brainstormSocketService, BrainstormSocketService } from './brainstormSo
 export { AuthService, authService } from './authService';
 export { AgentService, agentService } from './agentService';
 export { BrainstormService, brainstormService } from './brainstormService';
+
+// 导出服务
+export { default as ExportService } from './exportService';
+export type { ExportOptions, ExportTemplate } from './exportService';
