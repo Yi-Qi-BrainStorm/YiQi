@@ -5,7 +5,8 @@ import type {
   User, 
   LoginCredentials, 
   RegisterData, 
-  AuthResponse 
+  AuthResponse,
+  RegisterResponse 
 } from '@/types/user';
 
 /**
@@ -34,10 +35,10 @@ export const useAuthStore = defineStore('auth', () => {
       
       // 保存用户信息和token
       user.value = response.user;
-      token.value = response.token;
+      token.value = response.accessToken;
       
       // 持久化token
-      localStorage.setItem('auth_token', response.token);
+      localStorage.setItem('auth_token', response.accessToken);
       
       return response;
     } catch (err: any) {
@@ -51,19 +52,15 @@ export const useAuthStore = defineStore('auth', () => {
   /**
    * 用户注册
    */
-  const register = async (userData: RegisterData): Promise<AuthResponse> => {
+  const register = async (userData: RegisterData): Promise<RegisterResponse> => {
     loading.value = true;
     error.value = null;
     
     try {
       const response = await authService.register(userData);
       
-      // 注册成功后自动登录
-      user.value = response.user;
-      token.value = response.token;
-      
-      // 持久化token
-      localStorage.setItem('auth_token', response.token);
+      // 注册成功后不自动登录，需要用户手动登录
+      // 根据后端API，注册接口只返回用户信息，不包含token
       
       return response;
     } catch (err: any) {
@@ -106,8 +103,8 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true;
     
     try {
-      const response = await authService.getCurrentUser();
-      user.value = response.user;
+      const userData = await authService.getCurrentUser();
+      user.value = userData;
       return true;
     } catch (err) {
       // token无效，清除认证状态
@@ -119,18 +116,13 @@ export const useAuthStore = defineStore('auth', () => {
   };
 
   /**
-   * 刷新token
+   * 刷新token（当前后端API暂不支持token刷新）
+   * JWT是无状态的，过期后需要重新登录
    */
   const refreshToken = async (): Promise<void> => {
-    try {
-      const response = await authService.refreshToken();
-      token.value = response.token;
-      localStorage.setItem('auth_token', response.token);
-    } catch (err) {
-      // 刷新失败，清除认证状态
-      await logout();
-      throw err;
-    }
+    // 当前后端不支持token刷新，直接抛出错误要求重新登录
+    await logout();
+    throw new Error('Token已过期，请重新登录');
   };
 
   /**

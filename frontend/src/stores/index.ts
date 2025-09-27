@@ -9,7 +9,8 @@ export type {
   User, 
   LoginCredentials, 
   RegisterData, 
-  AuthResponse 
+  AuthResponse,
+  RegisterResponse 
 } from '@/types/user';
 
 export type { 
