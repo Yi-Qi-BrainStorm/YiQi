@@ -134,9 +134,11 @@ CREATE TABLE agent_versions (
     role_type VARCHAR(50) NOT NULL COMMENT '角色类型',
     system_prompt TEXT NOT NULL COMMENT '系统提示词',
     ai_model VARCHAR(50) NOT NULL COMMENT 'AI模型名称',
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE' COMMENT '状态(ACTIVE/INACTIVE/DELETED)',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE,
     INDEX idx_agent_id (agent_id),
     INDEX idx_version_number (version_number),
+    INDEX idx_status (status),
     INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB COMMENT='代理历史版本表';
