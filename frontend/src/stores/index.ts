@@ -3,6 +3,7 @@
 export { useAuthStore } from './auth';
 export { useAgentStore } from './agents';
 export { useBrainstormStore } from './brainstorm';
+export { useLoadingStore } from './loading';
 
 // 类型导出
 export type { 

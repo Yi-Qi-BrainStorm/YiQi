@@ -1,4 +1,5 @@
 import { ApiService } from './api';
+import { handleError, type ErrorContext } from './errorHandler';
 import type { 
   LoginCredentials, 
   RegisterData, 
@@ -17,33 +18,67 @@ export class AuthService {
    * 用户登录
    */
   static async login(credentials: LoginCredentials): Promise<AuthResponse> {
-    return ApiService.post<AuthResponse>('/users/login', credentials);
+    try {
+      return await ApiService.post<AuthResponse>('/users/login', credentials);
+    } catch (error) {
+      const context: ErrorContext = {
+        component: 'AuthService',
+        action: 'login',
+        metadata: { username: credentials.username },
+      };
+      throw handleError(error, context);
+    }
   }
 
   /**
    * 用户注册
    */
   static async register(userData: RegisterData): Promise<RegisterResponse> {
-    // Convert to backend-compatible format (remove email for now)
-    const backendData: BackendRegisterData = {
-      username: userData.username,
-      password: userData.password,
-    };
-    return ApiService.post<RegisterResponse>('/users/register', backendData);
+    try {
+      // Convert to backend-compatible format (remove email for now)
+      const backendData: BackendRegisterData = {
+        username: userData.username,
+        password: userData.password,
+      };
+      return await ApiService.post<RegisterResponse>('/users/register', backendData);
+    } catch (error) {
+      const context: ErrorContext = {
+        component: 'AuthService',
+        action: 'register',
+        metadata: { username: userData.username },
+      };
+      throw handleError(error, context);
+    }
   }
 
   /**
    * 获取当前用户信息
    */
   static async getCurrentUser(): Promise<User> {
-    return ApiService.get<User>('/users/me');
+    try {
+      return await ApiService.get<User>('/users/me');
+    } catch (error) {
+      const context: ErrorContext = {
+        component: 'AuthService',
+        action: 'getCurrentUser',
+      };
+      throw handleError(error, context);
+    }
   }
 
   /**
    * 用户登出
    */
   static async logout(): Promise<void> {
-    return ApiService.post<void>('/users/logout');
+    try {
+      return await ApiService.post<void>('/users/logout');
+    } catch (error) {
+      const context: ErrorContext = {
+        component: 'AuthService',
+        action: 'logout',
+      };
+      throw handleError(error, context);
+    }
   }
 
   // 注意：以下功能在当前后端API中暂未实现，保留接口以备将来扩展

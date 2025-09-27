@@ -1,9 +1,20 @@
 import { AxiosError } from 'axios';
+import { ElMessage, ElNotification } from 'element-plus';
 
 export interface AppError {
   code: string;
   message: string;
   details?: any;
+  timestamp?: string;
+  requestId?: string;
+}
+
+export interface ErrorContext {
+  component?: string;
+  action?: string;
+  userId?: string;
+  sessionId?: string;
+  metadata?: Record<string, any>;
 }
 
 export class ApiErrorHandler {
@@ -120,19 +131,328 @@ export class ApiErrorHandler {
 }
 
 /**
+ * 全局错误处理器
+ */
+export class GlobalErrorHandler {
+  private static errorQueue: AppError[] = [];
+  private static maxQueueSize = 50;
+  private static isOnline = navigator.onLine;
+
+  /**
+   * 初始化全局错误处理
+   */
+  static init() {
+    // 监听网络状态
+    window.addEventListener('online', () => {
+      this.isOnline = true;
+      this.processOfflineErrors();
+    });
+
+    window.addEventListener('offline', () => {
+      this.isOnline = false;
+    });
+
+    // 监听未捕获的Promise错误
+    window.addEventListener('unhandledrejection', (event) => {
+      console.error('未处理的Promise错误:', event.reason);
+      this.handleError(event.reason, { component: 'Global', action: 'UnhandledPromise' });
+      event.preventDefault();
+    });
+
+    // 监听JavaScript错误
+    window.addEventListener('error', (event) => {
+      console.error('JavaScript错误:', event.error);
+      this.handleError(event.error, { component: 'Global', action: 'JavaScriptError' });
+    });
+
+    // 监听认证失效事件
+    window.addEventListener('auth:expired', () => {
+      this.handleAuthExpired();
+    });
+  }
+
+  /**
+   * 处理错误
+   */
+  static handleError(error: any, context?: ErrorContext): AppError {
+    const appError = this.normalizeError(error);
+    
+    // 添加上下文信息
+    if (context) {
+      appError.details = {
+        ...appError.details,
+        context,
+      };
+    }
+
+    // 记录错误
+    this.logError(appError, context);
+
+    // 如果离线，加入队列
+    if (!this.isOnline) {
+      this.queueError(appError);
+      this.showOfflineMessage();
+      return appError;
+    }
+
+    // 显示用户友好的错误提示
+    this.showErrorToUser(appError, context);
+
+    // 上报错误（如果需要）
+    this.reportError(appError, context);
+
+    return appError;
+  }
+
+  /**
+   * 标准化错误格式
+   */
+  private static normalizeError(error: any): AppError {
+    if (error.isAxiosError) {
+      return ApiErrorHandler.handleApiError(error as AxiosError);
+    }
+    
+    if (error.code && error.message) {
+      return {
+        ...error,
+        timestamp: new Date().toISOString(),
+      };
+    }
+    
+    return {
+      code: 'UNKNOWN_ERROR',
+      message: error.message || '发生未知错误',
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * 记录错误日志
+   */
+  private static logError(error: AppError, context?: ErrorContext) {
+    const logData = {
+      error,
+      context,
+      timestamp: new Date().toISOString(),
+      userAgent: navigator.userAgent,
+      url: window.location.href,
+    };
+
+    console.error('应用错误:', logData);
+
+    // 在开发环境下显示详细信息
+    if (import.meta.env.DEV) {
+      console.group('错误详情');
+      console.error('错误代码:', error.code);
+      console.error('错误消息:', error.message);
+      console.error('错误详情:', error.details);
+      console.error('上下文:', context);
+      console.groupEnd();
+    }
+  }
+
+  /**
+   * 向用户显示错误
+   */
+  private static showErrorToUser(error: AppError, context?: ErrorContext) {
+    const message = ApiErrorHandler.formatErrorMessage(error);
+
+    switch (error.code) {
+      case 'NETWORK_ERROR':
+        ElMessage({
+          type: 'error',
+          message: '网络连接失败，请检查网络设置',
+          duration: 5000,
+        });
+        break;
+
+      case 'TIMEOUT':
+        ElMessage({
+          type: 'warning',
+          message: '请求超时，请稍后重试',
+          duration: 3000,
+        });
+        break;
+
+      case 'VALIDATION_ERROR':
+        ElMessage({
+          type: 'warning',
+          message,
+          duration: 4000,
+        });
+        break;
+
+      case 'UNAUTHORIZED':
+        // 认证错误由专门的处理函数处理
+        break;
+
+      case 'FORBIDDEN':
+        ElMessage({
+          type: 'error',
+          message: '权限不足，无法执行此操作',
+          duration: 4000,
+        });
+        break;
+
+      case 'NOT_FOUND':
+        ElMessage({
+          type: 'warning',
+          message: '请求的资源不存在',
+          duration: 3000,
+        });
+        break;
+
+      case 'SERVER_ERROR':
+      case 'SERVICE_UNAVAILABLE':
+        ElNotification({
+          title: '系统错误',
+          message: '服务暂时不可用，请稍后重试',
+          type: 'error',
+          duration: 6000,
+        });
+        break;
+
+      case 'RATE_LIMIT':
+        ElMessage({
+          type: 'warning',
+          message: '操作过于频繁，请稍后重试',
+          duration: 4000,
+        });
+        break;
+
+      default:
+        // 对于未知错误，显示通用消息
+        if (context?.component) {
+          ElNotification({
+            title: '操作失败',
+            message: message || '操作失败，请重试',
+            type: 'error',
+            duration: 5000,
+          });
+        } else {
+          ElMessage({
+            type: 'error',
+            message: message || '发生未知错误',
+            duration: 4000,
+          });
+        }
+    }
+  }
+
+  /**
+   * 处理认证失效
+   */
+  private static handleAuthExpired() {
+    ElNotification({
+      title: '登录已过期',
+      message: '您的登录已过期，请重新登录',
+      type: 'warning',
+      duration: 0, // 不自动关闭
+      onClick: () => {
+        window.location.href = '/login';
+      },
+    });
+
+    // 3秒后自动跳转
+    setTimeout(() => {
+      window.location.href = '/login';
+    }, 3000);
+  }
+
+  /**
+   * 显示离线消息
+   */
+  private static showOfflineMessage() {
+    ElMessage({
+      type: 'warning',
+      message: '网络连接已断开，操作将在网络恢复后重试',
+      duration: 5000,
+    });
+  }
+
+  /**
+   * 将错误加入离线队列
+   */
+  private static queueError(error: AppError) {
+    if (this.errorQueue.length >= this.maxQueueSize) {
+      this.errorQueue.shift(); // 移除最旧的错误
+    }
+    this.errorQueue.push(error);
+  }
+
+  /**
+   * 处理离线期间的错误
+   */
+  private static processOfflineErrors() {
+    if (this.errorQueue.length > 0) {
+      ElMessage({
+        type: 'success',
+        message: '网络已恢复连接',
+        duration: 3000,
+      });
+
+      // 清空队列
+      this.errorQueue = [];
+    }
+  }
+
+  /**
+   * 上报错误到监控系统
+   */
+  private static reportError(error: AppError, context?: ErrorContext) {
+    // 在生产环境中，这里可以集成错误监控服务
+    if (import.meta.env.PROD) {
+      // 示例：发送到错误监控服务
+      // errorMonitoringService.report(error, context);
+    }
+  }
+
+  /**
+   * 获取错误统计
+   */
+  static getErrorStats() {
+    return {
+      queueSize: this.errorQueue.length,
+      isOnline: this.isOnline,
+    };
+  }
+
+  /**
+   * 清除错误队列
+   */
+  static clearErrorQueue() {
+    this.errorQueue = [];
+  }
+}
+
+/**
  * 通用错误处理函数
  */
-export function handleError(error: any): AppError {
-  if (error.isAxiosError) {
-    return ApiErrorHandler.handleApiError(error as AxiosError);
-  }
-  
-  if (error.code && error.message) {
-    return error as AppError;
-  }
-  
-  return {
-    code: 'UNKNOWN_ERROR',
-    message: error.message || '发生未知错误',
+export function handleError(error: any, context?: ErrorContext): AppError {
+  return GlobalErrorHandler.handleError(error, context);
+}
+
+/**
+ * Vue错误处理插件
+ */
+export function setupGlobalErrorHandler(app: any) {
+  // 初始化全局错误处理
+  GlobalErrorHandler.init();
+
+  // Vue错误处理
+  app.config.errorHandler = (error: Error, instance: any, info: string) => {
+    console.error('Vue错误:', error, info);
+    GlobalErrorHandler.handleError(error, {
+      component: instance?.$options.name || 'Unknown',
+      action: 'VueError',
+      metadata: { info },
+    });
+  };
+
+  // 警告处理
+  app.config.warnHandler = (msg: string, instance: any, trace: string) => {
+    if (import.meta.env.DEV) {
+      console.warn('Vue警告:', msg, trace);
+    }
   };
 }
