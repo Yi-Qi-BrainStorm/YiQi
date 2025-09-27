@@ -2,6 +2,7 @@ import { ApiService } from './api';
 import type { 
   LoginCredentials, 
   RegisterData, 
+  BackendRegisterData,
   User, 
   AuthResponse,
   RegisterResponse 
@@ -23,7 +24,12 @@ export class AuthService {
    * 用户注册
    */
   static async register(userData: RegisterData): Promise<RegisterResponse> {
-    return ApiService.post<RegisterResponse>('/users/register', userData);
+    // Convert to backend-compatible format (remove email for now)
+    const backendData: BackendRegisterData = {
+      username: userData.username,
+      password: userData.password,
+    };
+    return ApiService.post<RegisterResponse>('/users/register', backendData);
   }
 
   /**

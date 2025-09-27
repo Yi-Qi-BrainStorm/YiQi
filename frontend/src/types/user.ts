@@ -3,6 +3,7 @@
 export interface User {
   id: number;
   username: string;
+  email: string;
   createdAt: string;
   lastLoginAt: string | null;
   failedLoginAttempts: number;
@@ -15,6 +16,13 @@ export interface LoginCredentials {
 }
 
 export interface RegisterData {
+  username: string;
+  email: string;
+  password: string;
+}
+
+// Backend API compatible register data (without email for now)
+export interface BackendRegisterData {
   username: string;
   password: string;
 }
@@ -29,6 +37,7 @@ export interface AuthResponse {
 export interface RegisterResponse {
   id: number;
   username: string;
+  email: string;
   createdAt: string;
   lastLoginAt: string | null;
   failedLoginAttempts: number;

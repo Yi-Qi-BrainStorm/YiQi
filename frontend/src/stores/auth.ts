@@ -40,6 +40,10 @@ export const useAuthStore = defineStore('auth', () => {
       // 持久化token
       localStorage.setItem('auth_token', response.accessToken);
       
+      // 开始监控认证状态
+      const { AuthMonitor } = await import('@/utils/authUtils');
+      AuthMonitor.getInstance().startMonitoring();
+      
       return response;
     } catch (err: any) {
       error.value = err.message || '登录失败';
@@ -82,6 +86,10 @@ export const useAuthStore = defineStore('auth', () => {
       // 即使后端登出失败，也要清除本地状态
       console.warn('后端登出失败:', err);
     } finally {
+      // 停止监控认证状态
+      const { AuthMonitor } = await import('@/utils/authUtils');
+      AuthMonitor.getInstance().stopMonitoring();
+      
       // 清除本地状态
       user.value = null;
       token.value = null;
