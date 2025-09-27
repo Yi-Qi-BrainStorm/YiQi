@@ -29,6 +29,9 @@
         </a-button>
       </a-badge>
 
+      <!-- 主题切换 -->
+      <ThemeSwitcher />
+
       <!-- 帮助 -->
       <a-button type="text" class="header-action" @click="showHelp">
         <template #icon>
@@ -75,6 +78,7 @@ import { useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import { message } from 'ant-design-vue'
 import Breadcrumb from './Breadcrumb.vue'
+import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -148,32 +152,50 @@ const handleUserMenuClick = async ({ key }: { key: string }) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 24px;
-  background: #fff;
+  padding: 0 var(--spacing-6);
+  background-color: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  transition: all var(--transition-base);
+
+  @include mobile-only {
+    padding: 0 var(--spacing-4);
+  }
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--spacing-4);
   flex: 1;
 
-  .sidebar-trigger {
-    font-size: 18px;
-    color: #666;
-    
-    &:hover {
-      color: #1890ff;
-    }
+  @include mobile-only {
+    gap: var(--spacing-3);
   }
 
-  .breadcrumb {
-    :deep(.ant-breadcrumb-link) {
-      color: #666;
-      
-      &:hover {
-        color: #1890ff;
-      }
+  .sidebar-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    font-size: var(--font-size-lg);
+    color: var(--color-text-secondary);
+    border-radius: var(--radius-lg);
+    transition: all var(--transition-fast);
+    
+    &:hover {
+      color: var(--color-primary-600);
+      background-color: var(--color-surface-hover);
+      transform: scale(1.05);
+    }
+
+    &:active {
+      transform: scale(0.95);
+    }
+
+    &:focus {
+      outline: 2px solid var(--color-primary-500);
+      outline-offset: 2px;
     }
   }
 }
@@ -181,60 +203,210 @@ const handleUserMenuClick = async ({ key }: { key: string }) => {
 .header-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-2);
 
   .header-action {
-    font-size: 16px;
-    color: #666;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    font-size: var(--font-size-base);
+    color: var(--color-text-secondary);
+    border-radius: var(--radius-lg);
+    transition: all var(--transition-fast);
+    position: relative;
     
     &:hover {
-      color: #1890ff;
+      color: var(--color-primary-600);
+      background-color: var(--color-surface-hover);
+      transform: translateY(-1px);
+    }
+
+    &:active {
+      transform: translateY(0);
+    }
+
+    &:focus {
+      outline: 2px solid var(--color-primary-500);
+      outline-offset: 2px;
+    }
+  }
+
+  :deep(.ant-badge) {
+    .ant-badge-count {
+      background-color: var(--color-error-500);
+      border-color: var(--color-surface);
+      box-shadow: var(--shadow-sm);
+      font-size: var(--font-size-xs);
+      min-width: 18px;
+      height: 18px;
+      line-height: 18px;
+      border-radius: var(--radius-full);
     }
   }
 
   .user-dropdown-trigger {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    border-radius: 6px;
+    gap: var(--spacing-2);
+    padding: var(--spacing-2) var(--spacing-3);
+    border-radius: var(--radius-lg);
     cursor: pointer;
-    transition: background-color 0.2s;
+    transition: all var(--transition-fast);
+    border: 1px solid transparent;
 
     &:hover {
-      background-color: #f5f5f5;
+      background-color: var(--color-surface-hover);
+      border-color: var(--color-border);
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-sm);
+    }
+
+    &:active {
+      transform: translateY(0);
+    }
+
+    &:focus {
+      outline: 2px solid var(--color-primary-500);
+      outline-offset: 2px;
+    }
+
+    :deep(.ant-avatar) {
+      border: 2px solid var(--color-border);
+      transition: border-color var(--transition-fast);
+
+      &:hover {
+        border-color: var(--color-primary-500);
+      }
     }
 
     .username {
-      font-size: 14px;
-      color: #333;
+      font-size: var(--font-size-sm);
+      font-weight: var(--font-weight-medium);
+      color: var(--color-text-primary);
       max-width: 120px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      transition: color var(--transition-fast);
+
+      @include mobile-only {
+        display: none;
+      }
     }
 
     .dropdown-icon {
-      font-size: 12px;
-      color: #999;
+      font-size: var(--font-size-xs);
+      color: var(--color-text-tertiary);
+      transition: all var(--transition-fast);
+    }
+
+    &:hover .dropdown-icon {
+      color: var(--color-primary-600);
+      transform: rotate(180deg);
     }
   }
 }
 
-// 响应式设计
-@media (max-width: 768px) {
-  .main-header {
-    padding: 0 16px;
-  }
+// 用户菜单样式
+:deep(.ant-dropdown) {
+  .ant-dropdown-menu {
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-xl);
+    border: 1px solid var(--color-border);
+    background-color: var(--color-surface);
+    padding: var(--spacing-2);
+    min-width: 180px;
 
-  .header-left {
-    gap: 12px;
-  }
+    .ant-dropdown-menu-item {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-3);
+      padding: var(--spacing-3) var(--spacing-4);
+      border-radius: var(--radius-md);
+      color: var(--color-text-primary);
+      font-size: var(--font-size-sm);
+      transition: all var(--transition-fast);
 
-  .header-right {
-    .username {
-      display: none;
+      &:hover {
+        background-color: var(--color-surface-hover);
+        color: var(--color-primary-600);
+        transform: translateX(2px);
+      }
+
+      &:active {
+        transform: translateX(0);
+      }
+
+      .anticon {
+        font-size: var(--font-size-base);
+        color: var(--color-text-secondary);
+        transition: color var(--transition-fast);
+      }
+
+      &:hover .anticon {
+        color: var(--color-primary-600);
+      }
     }
+
+    .ant-dropdown-menu-item-divider {
+      background-color: var(--color-border);
+      margin: var(--spacing-2) 0;
+    }
+  }
+}
+
+// 面包屑样式增强
+:deep(.breadcrumb) {
+  .ant-breadcrumb {
+    font-size: var(--font-size-sm);
+
+    .ant-breadcrumb-link {
+      color: var(--color-text-secondary);
+      transition: color var(--transition-fast);
+      
+      &:hover {
+        color: var(--color-primary-600);
+      }
+    }
+
+    .ant-breadcrumb-separator {
+      color: var(--color-text-tertiary);
+    }
+  }
+}
+
+// 动画效果
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.header-action {
+  &.has-notification {
+    animation: pulse 2s infinite;
+  }
+}
+
+// 响应式增强
+@include tablet-up {
+  .header-right {
+    gap: var(--spacing-3);
+  }
+}
+
+@include desktop-up {
+  .main-header {
+    padding: 0 var(--spacing-8);
+  }
+  
+  .header-left {
+    gap: var(--spacing-6);
   }
 }
 </style>
