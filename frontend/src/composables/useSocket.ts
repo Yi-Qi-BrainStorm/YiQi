@@ -35,6 +35,11 @@ export function useSocket(namespace: string = '/') {
   // Socket实例
   let socketInstance: SocketInstance | null = null;
   
+  // 自动重连配置
+  const maxReconnectAttempts = 5;
+  const reconnectInterval = 3000; // 3秒
+  let autoReconnectTimer: NodeJS.Timeout | null = null;
+  
   // 日志记录器
   const logger = createSocketLogger(namespace);
   
@@ -129,6 +134,47 @@ export function useSocket(namespace: string = '/') {
     
     disconnect();
     await connect();
+  };
+
+  /**
+   * 自动重连机制
+   * Requirement 4.5: 添加网络断线重连机制
+   */
+  const startAutoReconnect = (): void => {
+    if (autoReconnectTimer) return;
+    
+    autoReconnectTimer = setInterval(async () => {
+      if (!isConnected.value && !isConnecting.value && reconnectAttempts.value < maxReconnectAttempts) {
+        logger.info(`自动重连尝试 ${reconnectAttempts.value + 1}/${maxReconnectAttempts}`);
+        
+        try {
+          await reconnect();
+          if (isConnected.value) {
+            stopAutoReconnect();
+            logger.info('自动重连成功');
+          }
+        } catch (err) {
+          reconnectAttempts.value++;
+          logger.warn(`自动重连失败，尝试次数: ${reconnectAttempts.value}`);
+          
+          if (reconnectAttempts.value >= maxReconnectAttempts) {
+            stopAutoReconnect();
+            logger.error('自动重连达到最大次数，停止重连');
+            error.value = '连接失败，请手动重新连接';
+          }
+        }
+      }
+    }, reconnectInterval);
+  };
+
+  /**
+   * 停止自动重连
+   */
+  const stopAutoReconnect = (): void => {
+    if (autoReconnectTimer) {
+      clearInterval(autoReconnectTimer);
+      autoReconnectTimer = null;
+    }
   };
 
   /**
@@ -277,6 +323,11 @@ export function useSocket(namespace: string = '/') {
       connectionStatus.value = 'disconnected';
       
       logger.warn('Socket断开连接', { reason });
+      
+      // 如果不是主动断开，启动自动重连
+      if (reason !== 'io client disconnect') {
+        startAutoReconnect();
+      }
     });
 
     // 连接错误事件
@@ -365,6 +416,7 @@ export function useSocket(namespace: string = '/') {
     // 组件卸载时断开连接
     if (socketInstance) {
       logger.info('组件卸载，断开Socket连接');
+      stopAutoReconnect();
       disconnect();
     }
   });
@@ -403,5 +455,9 @@ export function useSocket(namespace: string = '/') {
     // 工具函数
     measureLatency,
     clearError,
+    
+    // 自动重连控制
+    startAutoReconnect,
+    stopAutoReconnect,
   };
 }

@@ -328,17 +328,135 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
 
   /**
    * 更新代理状态
+   * Requirement 4.4: 同步代理思考状态到UI
    */
   const updateAgentStatus = (agentId: number, status: AgentRuntimeStatus): void => {
     agentStatuses.value[agentId] = status;
+    
+    // 实时更新会话中的代理状态
+    if (currentSession.value) {
+      const sessionAgent = currentSession.value.agents.find((a: any) => a.agentId === agentId);
+      if (sessionAgent) {
+        sessionAgent.status = status;
+      }
+      
+      // 如果当前阶段存在，更新阶段中的代理响应状态
+      const currentPhase = currentSession.value.phases.find(
+        (phase: any) => phase.phaseType === currentSession.value!.currentPhase
+      );
+      
+      if (currentPhase) {
+        const response = currentPhase.responses.find((r: any) => r.agentId === agentId);
+        if (response) {
+          response.status = status === 'completed' ? 'COMPLETED' : 
+                           status === 'thinking' ? 'IN_PROGRESS' : 
+                           status === 'error' ? 'FAILED' : 'PENDING';
+        }
+      }
+    }
   };
 
   /**
    * 设置代理结果
+   * Requirement 4.4: 实时更新阶段进度和结果
    */
   const setAgentResult = (agentId: number, result: AgentResult): void => {
     realTimeResults.value[agentId] = result;
     agentStatuses.value[agentId] = 'completed';
+    
+    // 实时更新会话中的代理结果
+    if (currentSession.value) {
+      const currentPhase = currentSession.value.phases.find(
+        (phase: any) => phase.phaseType === currentSession.value!.currentPhase
+      );
+      
+      if (currentPhase) {
+        // 更新或添加代理响应
+        const existingResponseIndex = currentPhase.responses.findIndex(
+          (r: any) => r.agentId === agentId
+        );
+        
+        if (existingResponseIndex >= 0) {
+          // 更新现有响应
+          currentPhase.responses[existingResponseIndex] = {
+            ...currentPhase.responses[existingResponseIndex],
+            content: result.content,
+            status: 'COMPLETED',
+            processingTimeMs: result.processingTime,
+            completedAt: result.createdAt,
+          };
+        } else {
+          // 添加新响应
+          currentPhase.responses.push({
+            id: Date.now(), // 临时ID
+            phaseId: currentPhase.id,
+            agentId,
+            content: result.content,
+            status: 'COMPLETED',
+            processingTimeMs: result.processingTime,
+            createdAt: result.createdAt,
+            completedAt: result.createdAt,
+          });
+        }
+        
+        // 更新阶段的代理结果列表
+        const existingResultIndex = currentPhase.agentResults.findIndex(
+          (r: any) => r.agentId === agentId
+        );
+        
+        if (existingResultIndex >= 0) {
+          currentPhase.agentResults[existingResultIndex] = result;
+        } else {
+          currentPhase.agentResults.push(result);
+        }
+      }
+    }
+  };
+
+  /**
+   * 更新阶段进度
+   * Requirement 4.5: 实时更新阶段进度
+   */
+  const updateStageProgress = (phaseType: PhaseType, progress: number): void => {
+    if (!currentSession.value) return;
+    
+    const phase = currentSession.value.phases.find((p: any) => p.phaseType === phaseType);
+    if (phase) {
+      phase.progress = progress;
+    }
+  };
+
+  /**
+   * 批量更新代理状态
+   * 用于网络重连后同步状态
+   */
+  const syncAgentStatuses = (statuses: Record<number, AgentRuntimeStatus>): void => {
+    Object.entries(statuses).forEach(([agentId, status]) => {
+      updateAgentStatus(parseInt(agentId), status);
+    });
+  };
+
+  /**
+   * 批量更新代理结果
+   * 用于网络重连后同步结果
+   */
+  const syncAgentResults = (results: Record<number, AgentResult>): void => {
+    Object.entries(results).forEach(([agentId, result]) => {
+      setAgentResult(parseInt(agentId), result);
+    });
+  };
+
+  /**
+   * 同步会话状态
+   * 用于网络重连后完整同步
+   */
+  const syncSessionState = async (sessionId: number): Promise<void> => {
+    try {
+      await loadSession(sessionId);
+    } catch (err: any) {
+      error.value = err.message || '同步会话状态失败';
+      throw err;
+    }
   };
 
   /**
@@ -495,6 +613,10 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
     restartCurrentStage,
     updateAgentStatus,
     setAgentResult,
+    updateStageProgress,
+    syncAgentStatuses,
+    syncAgentResults,
+    syncSessionState,
     setStageSummary,
     setFinalReport,
     fetchFinalReport,
