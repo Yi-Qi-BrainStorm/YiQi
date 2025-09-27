@@ -10,18 +10,27 @@ export class TokenUtils {
    */
   static parseJWT(token: string): any {
     try {
-      const base64Url = token.split('.')[1]
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
+      if (!token || typeof token !== 'string') {
+        return null;
+      }
+      
+      const parts = token.split('.');
+      if (parts.length !== 3) {
+        return null;
+      }
+      
+      const base64Url = parts[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
       const jsonPayload = decodeURIComponent(
         atob(base64)
           .split('')
           .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
           .join('')
-      )
-      return JSON.parse(jsonPayload)
+      );
+      return JSON.parse(jsonPayload);
     } catch (error) {
-      console.error('解析JWT token失败:', error)
-      return null
+      console.error('解析JWT token失败:', error);
+      return null;
     }
   }
 
@@ -87,8 +96,10 @@ export class AuthMonitor {
       this.checkAuthStatus()
     }, this.CHECK_INTERVAL)
 
-    // 立即执行一次检查
-    this.checkAuthStatus()
+    // 延迟执行第一次检查，避免在登录过程中立即触发
+    setTimeout(() => {
+      this.checkAuthStatus()
+    }, 2000)
   }
 
   /**

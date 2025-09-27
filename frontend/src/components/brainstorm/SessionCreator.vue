@@ -339,6 +339,9 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="scss">
+@import '@/styles/responsive.scss';
+@import '@/styles/utilities.scss';
+
 .session-creator {
   max-width: 900px;
   margin: 0 auto;

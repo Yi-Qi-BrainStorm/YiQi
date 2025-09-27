@@ -237,7 +237,7 @@ public class ReportService {
         PhaseType[] phaseTypes = {
             PhaseType.IDEA_GENERATION,
             PhaseType.FEASIBILITY_ANALYSIS,
-            PhaseType.CRITICISM_DISCUSSION
+            PhaseType.DRAWBACK_DISCUSSION
         };
 
         for (PhaseType phaseType : phaseTypes) {

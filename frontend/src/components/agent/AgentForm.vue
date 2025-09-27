@@ -97,7 +97,7 @@
                   </div>
                   <div class="model-specs">
                     <span class="spec-item">
-                      <TokenOutlined />
+                      <ApiOutlined />
                       最大 {{ formatNumber(model.maxTokens) }} tokens
                     </span>
                     <span class="spec-item">
@@ -264,7 +264,7 @@ import {
   QuestionCircleOutlined,
   ExperimentOutlined,
   ExclamationCircleOutlined,
-  TokenOutlined,
+  ApiOutlined, // 替换 TokenOutlined
   DollarOutlined,
 } from '@ant-design/icons-vue';
 import type { FormInstance } from 'ant-design-vue';

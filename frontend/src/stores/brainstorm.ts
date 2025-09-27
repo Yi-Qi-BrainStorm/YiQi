@@ -53,7 +53,7 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
       current: currentPhaseIndex + 1,
       total: 3,
       stages: phaseNames,
-      completed: currentSession.value.phases.map(phase => phase.status === 'COMPLETED'),
+      completed: currentSession.value.phases?.map(phase => phase.status === 'COMPLETED') || [],
     };
   });
 
@@ -163,9 +163,11 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
       currentSession.value = session;
       
       // 初始化代理状态
-      session.agents.forEach(sessionAgent => {
-        agentStatuses.value[sessionAgent.agentId] = 'idle';
-      });
+      if (session.agents && Array.isArray(session.agents)) {
+        session.agents.forEach(sessionAgent => {
+          agentStatuses.value[sessionAgent.agentId] = 'idle';
+        });
+      }
       
       // 如果会话已有阶段结果，加载到实时结果中
       if (session.phases.length > 0) {
@@ -466,7 +468,7 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
     if (!currentSession.value) return;
     
     // 找到对应的阶段并更新总结
-    const phase = currentSession.value.phases.find(p => p.phaseType === phaseType);
+    const phase = currentSession.value.phases?.find(p => p.phaseType === phaseType);
     if (phase) {
       phase.summary = JSON.stringify(summary);
       phase.status = 'COMPLETED';
@@ -623,6 +625,7 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
     deleteSession,
     duplicateSession,
     clearCurrentSession,
+    clearSession: clearCurrentSession, // Alias for compatibility
     clearError,
     reset,
   };

@@ -402,6 +402,46 @@ class SocketServiceManager implements SocketManager {
         const match = path.match(/\/brainstorm\/([^\/]+)/);
         return match ? match[1] : undefined;
     }
+
+    /**
+     * 监听事件 (兼容性方法)
+     */
+    on<K extends keyof BrainstormSocketEvents>(
+        event: K,
+        listener: BrainstormSocketEvents[K]
+    ): void {
+        // 在默认socket上监听事件
+        const defaultSocket = this.sockets.get('default');
+        if (defaultSocket) {
+            defaultSocket.on(event, listener);
+        }
+    }
+
+    /**
+     * 移除事件监听器 (兼容性方法)
+     */
+    off<K extends keyof BrainstormSocketEvents>(
+        event: K,
+        listener?: BrainstormSocketEvents[K]
+    ): void {
+        const defaultSocket = this.sockets.get('default');
+        if (defaultSocket) {
+            defaultSocket.off(event, listener);
+        }
+    }
+
+    /**
+     * 发送事件 (兼容性方法)
+     */
+    emit<K extends keyof ClientSocketEvents>(
+        event: K,
+        ...args: Parameters<ClientSocketEvents[K]>
+    ): void {
+        const defaultSocket = this.sockets.get('default');
+        if (defaultSocket) {
+            defaultSocket.emit(event, ...args);
+        }
+    }
 }
 
 // 创建全局Socket服务实例

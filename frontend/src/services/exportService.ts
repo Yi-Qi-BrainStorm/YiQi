@@ -59,7 +59,7 @@ export class ExportService {
    * 导出报告为指定格式
    */
   static async exportReport(report: FinalReport, options: ExportOptions): Promise<Blob> {
-    const { format, template = 'default' } = options;
+    const { format } = options;
 
     switch (format) {
       case 'html':
@@ -84,46 +84,29 @@ export class ExportService {
   }
 
   /**
-   * 导出为PDF格式
+   * 导出为PDF格式 (简化版本)
    */
   private static async exportToPDF(report: FinalReport, options: ExportOptions): Promise<Blob> {
-    // 使用html2pdf或jsPDF库
-    const html2pdf = await import('html2pdf.js');
-    
+    // 简化版本：生成HTML并提示用户使用浏览器打印为PDF
     const template = this.DEFAULT_TEMPLATES[options.template || 'default'];
     const htmlContent = this.generateHTMLContent(report, template, options);
     
-    const element = document.createElement('div');
-    element.innerHTML = htmlContent;
+    // 添加打印样式
+    const printableHTML = htmlContent.replace(
+      '</head>',
+      `<style>@media print { body { margin: 0; } .no-print { display: none; } }</style></head>`
+    );
     
-    const opt = {
-      margin: 1,
-      filename: options.fileName || `${report.topic}-报告.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true },
-      jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
-    };
-
-    return html2pdf.default().set(opt).from(element).outputPdf('blob');
+    return new Blob([printableHTML], { type: 'text/html;charset=utf-8' });
   }
 
   /**
-   * 导出为Word格式
+   * 导出为Word格式 (简化版本)
    */
   private static async exportToWord(report: FinalReport, options: ExportOptions): Promise<Blob> {
-    // 使用docx库生成Word文档
-    const docx = await import('docx');
-    
-    const doc = new docx.Document({
-      sections: [
-        {
-          properties: {},
-          children: this.generateWordContent(report, options),
-        },
-      ],
-    });
-
-    return docx.Packer.toBlob(doc);
+    // 简化版本：生成富文本格式
+    const content = this.generatePlainTextContent(report);
+    return new Blob([content], { type: 'text/plain;charset=utf-8' });
   }
 
   /**
@@ -173,87 +156,54 @@ export class ExportService {
   }
 
   /**
-   * 生成Word文档内容
+   * 生成纯文本内容
    */
-  private static generateWordContent(report: FinalReport, options: ExportOptions): any[] {
-    const docx = require('docx');
-    
-    return [
-      // 标题页
-      new docx.Paragraph({
-        children: [
-          new docx.TextRun({
-            text: `${report.topic} - 产品解决方案报告`,
-            bold: true,
-            size: 32,
-            color: '1890ff',
-          }),
-        ],
-        alignment: docx.AlignmentType.CENTER,
-        spacing: { after: 400 },
-      }),
-      
-      // 生成时间
-      new docx.Paragraph({
-        children: [
-          new docx.TextRun({
-            text: `生成时间: ${new Date(report.generatedAt).toLocaleString('zh-CN')}`,
-            size: 20,
-          }),
-        ],
-        alignment: docx.AlignmentType.CENTER,
-        spacing: { after: 600 },
-      }),
+  private static generatePlainTextContent(report: FinalReport): string {
+    return `
+${report.topic} - 产品解决方案报告
 
-      // 分页符
-      new docx.Paragraph({
-        children: [new docx.PageBreak()],
-      }),
+生成时间: ${new Date(report.generatedAt).toLocaleString('zh-CN')}
+会话ID: ${report.sessionId}
 
-      // 执行摘要
-      new docx.Paragraph({
-        children: [
-          new docx.TextRun({
-            text: '执行摘要',
-            bold: true,
-            size: 28,
-            color: '262626',
-          }),
-        ],
-        heading: docx.HeadingLevel.HEADING_1,
-        spacing: { before: 240, after: 120 },
-      }),
-      
-      new docx.Paragraph({
-        children: [
-          new docx.TextRun({
-            text: report.executiveSummary,
-            size: 22,
-          }),
-        ],
-        spacing: { after: 240 },
-      }),
+执行摘要
+========
+${report.executiveSummary}
 
-      // 设计概念
-      new docx.Paragraph({
-        children: [
-          new docx.TextRun({
-            text: '设计概念',
-            bold: true,
-            size: 28,
-            color: '262626',
-          }),
-        ],
-        heading: docx.HeadingLevel.HEADING_1,
-        spacing: { before: 240, after: 120 },
-      }),
+设计概念
+========
+产品类型: ${report.designConcept.productType}
+文化背景: ${report.designConcept.culturalBackground}
+目标受众: ${report.designConcept.targetAudience}
+设计元素: ${report.designConcept.designElements.join(', ')}
+视觉描述: ${report.designConcept.visualDescription}
 
-      ...this.generateWordDesignConcept(report.designConcept),
-      ...this.generateWordTechnicalSolution(report.technicalSolution),
-      ...this.generateWordMarketingStrategy(report.marketingStrategy),
-      ...this.generateWordImplementationPlan(report.implementationPlan),
-      ...this.generateWordRiskAssessment(report.riskAssessment),
-    ];
+技术方案
+========
+材料清单: ${report.technicalSolution.materials.join(', ')}
+生产流程: ${report.technicalSolution.productionProcess.join(' -> ')}
+质量标准: ${report.technicalSolution.qualityStandards.join(', ')}
+
+成本估算:
+- 材料成本: ${report.technicalSolution.costEstimation.materials} ${report.technicalSolution.costEstimation.currency}
+- 人工成本: ${report.technicalSolution.costEstimation.labor} ${report.technicalSolution.costEstimation.currency}
+- 管理费用: ${report.technicalSolution.costEstimation.overhead} ${report.technicalSolution.costEstimation.currency}
+- 总成本: ${report.technicalSolution.costEstimation.total} ${report.technicalSolution.costEstimation.currency}
+
+营销策略
+========
+定位声明: ${report.marketingStrategy.positioningStatement}
+总预算: ${report.marketingStrategy.budget.total} ${report.marketingStrategy.budget.currency}
+
+实施计划
+========
+总实施周期: ${report.implementationPlan.totalDuration} 天
+
+风险评估
+========
+整体风险等级: ${this.getRiskLevelLabel(report.riskAssessment.overallRiskLevel)}
+
+本报告由AI头脑风暴平台自动生成
+`;
   }
 
   /**
@@ -380,18 +330,6 @@ export class ExportService {
           <p>${marketingStrategy.positioningStatement}</p>
         </div>
         
-        <h3>营销渠道</h3>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
-          ${marketingStrategy.channels.map(channel => `
-            <div style="border: 1px solid #d9d9d9; padding: 15px; border-radius: 6px;">
-              <h4>${channel.name}</h4>
-              <p><strong>类型:</strong> ${this.getChannelTypeLabel(channel.type)}</p>
-              <p><strong>预算:</strong> ${channel.budget} ${marketingStrategy.budget.currency}</p>
-              <p><strong>预期覆盖:</strong> ${channel.expectedReach.toLocaleString()} 人</p>
-            </div>
-          `).join('')}
-        </div>
-        
         <h3>预算分配</h3>
         <div style="background: #fafafa; padding: 20px; border-radius: 8px;">
           <p><strong>总预算:</strong> ${marketingStrategy.budget.total} ${marketingStrategy.budget.currency}</p>
@@ -430,16 +368,6 @@ export class ExportService {
               ${phase.tasks.map(task => `<li>${task}</li>`).join('')}
             </ul>
             ${phase.dependencies.length ? `<div><strong>依赖:</strong> ${phase.dependencies.join(', ')}</div>` : ''}
-          </div>
-        `).join('')}
-        
-        <h3>关键里程碑</h3>
-        ${implementationPlan.milestones.map(milestone => `
-          <div style="margin-bottom: 20px; padding: 15px; border: 1px solid #d9d9d9; border-radius: 6px;">
-            <h4>${milestone.name}</h4>
-            <p><strong>截止日期:</strong> ${new Date(milestone.dueDate).toLocaleDateString('zh-CN')}</p>
-            <p>${milestone.description}</p>
-            <div><strong>交付物:</strong> ${milestone.deliverables.join(', ')}</div>
           </div>
         `).join('')}
       </section>
@@ -485,16 +413,6 @@ export class ExportService {
             `).join('')}
           </tbody>
         </table>
-        
-        <h3>缓解策略</h3>
-        ${riskAssessment.mitigationStrategies.map(strategy => `
-          <div style="margin-bottom: 20px; padding: 15px; border: 1px solid #d9d9d9; border-radius: 6px;">
-            <h4>风险 ${strategy.riskId} 的缓解策略</h4>
-            <p><strong>策略:</strong> ${strategy.strategy}</p>
-            <p><strong>成本:</strong> ${strategy.cost} 元</p>
-            <p><strong>有效性评分:</strong> ${strategy.effectiveness}/10</p>
-          </div>
-        `).join('')}
       </section>
     `;
   }
@@ -511,74 +429,7 @@ export class ExportService {
     `;
   }
 
-  // Word文档生成辅助方法
-  private static generateWordDesignConcept(designConcept: any): any[] {
-    const docx = require('docx');
-    
-    return [
-      new docx.Paragraph({
-        children: [
-          new docx.TextRun({
-            text: '设计概念',
-            bold: true,
-            size: 28,
-            color: '262626',
-          }),
-        ],
-        heading: docx.HeadingLevel.HEADING_1,
-        spacing: { before: 240, after: 120 },
-      }),
-      
-      new docx.Paragraph({
-        children: [
-          new docx.TextRun({
-            text: '产品类型: ',
-            bold: true,
-            size: 22,
-          }),
-          new docx.TextRun({
-            text: designConcept.productType,
-            size: 22,
-          }),
-        ],
-        spacing: { after: 120 },
-      }),
-      
-      // 更多设计概念内容...
-    ];
-  }
-
-  private static generateWordTechnicalSolution(technicalSolution: any): any[] {
-    // 实现Word技术方案生成
-    return [];
-  }
-
-  private static generateWordMarketingStrategy(marketingStrategy: any): any[] {
-    // 实现Word营销策略生成
-    return [];
-  }
-
-  private static generateWordImplementationPlan(implementationPlan: any): any[] {
-    // 实现Word实施计划生成
-    return [];
-  }
-
-  private static generateWordRiskAssessment(riskAssessment: any): any[] {
-    // 实现Word风险评估生成
-    return [];
-  }
-
   // 辅助方法
-  private static getChannelTypeLabel(type: string): string {
-    const labels: Record<string, string> = {
-      digital: '数字化',
-      traditional: '传统媒体',
-      social: '社交媒体',
-      direct: '直接营销',
-    };
-    return labels[type] || type;
-  }
-
   private static getRiskLevelLabel(level: string): string {
     const labels: Record<string, string> = {
       low: '低',

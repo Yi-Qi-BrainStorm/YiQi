@@ -132,10 +132,19 @@ export function useAuth() {
    * 已认证用户访问登录/注册页面时重定向到主工作台
    */
   const requireGuest = async (): Promise<boolean> => {
-    if (isAuthenticated.value) {
+    // 检查是否有有效的用户信息，而不仅仅是token
+    if (authStore.user && authStore.token) {
       await router.push('/dashboard');
       return false;
     }
+    
+    // 如果只有token但没有用户信息，清除无效token
+    if (authStore.token && !authStore.user) {
+      console.warn('发现无效token，正在清除...');
+      localStorage.removeItem('auth_token');
+      authStore.token = null;
+    }
+    
     return true;
   };
 

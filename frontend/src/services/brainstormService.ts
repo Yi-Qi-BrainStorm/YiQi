@@ -1,4 +1,5 @@
 import { ApiService } from './api';
+import { isMockEnabled } from '@/utils/mockEnabler';
 import type { 
   BrainstormSession, 
   Phase, 
@@ -23,6 +24,12 @@ export class BrainstormService {
     currentPhase?: PhaseType;
     search?: string;
   }): Promise<PaginatedResponse<BrainstormSession>> {
+    // 如果启用了Mock模式，使用Mock服务
+    if (isMockEnabled()) {
+      const { brainstormService: mockService } = await import('./__mocks__/brainstormService');
+      return await mockService.getSessions(params);
+    }
+    
     return ApiService.get<PaginatedResponse<BrainstormSession>>('/sessions', { params });
   }
 
@@ -162,6 +169,18 @@ export class BrainstormService {
    */
   static async generateReport(sessionId: number): Promise<Report> {
     return ApiService.post<Report>(`/sessions/${sessionId}/generate-report`);
+  }
+
+  /**
+   * 获取用户的会话列表 (兼容性方法)
+   */
+  static async getUserSessions(userId: string, params?: {
+    page?: number;
+    limit?: number;
+    status?: SessionStatus;
+  }): Promise<BrainstormSession[]> {
+    const response = await this.getSessions(params);
+    return response.data || [];
   }
 }
 

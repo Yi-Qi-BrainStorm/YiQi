@@ -1,4 +1,5 @@
 import { ApiService } from './api';
+import { isMockEnabled } from '@/utils/mockEnabler';
 import type { 
   Agent, 
   AgentFormData, 
@@ -22,6 +23,12 @@ export class AgentService {
     roleType?: string;
     status?: AgentStatus;
   }): Promise<PaginatedResponse<Agent>> {
+    // 如果启用了Mock模式，使用Mock服务
+    if (isMockEnabled()) {
+      const { AgentService: MockAgentService } = await import('./__mocks__/agentService');
+      return await MockAgentService.getAgents(params);
+    }
+    
     return ApiService.get<PaginatedResponse<Agent>>('/agents', { params });
   }
 
@@ -83,6 +90,12 @@ export class AgentService {
    * 获取可用的AI模型列表
    */
   static async getAvailableModels(): Promise<AIModel[]> {
+    // 如果启用了Mock模式，使用Mock服务
+    if (isMockEnabled()) {
+      const { AgentService: MockAgentService } = await import('./__mocks__/agentService');
+      return await MockAgentService.getAvailableModels();
+    }
+    
     return ApiService.get<AIModel[]>('/agents/models');
   }
 

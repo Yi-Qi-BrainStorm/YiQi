@@ -147,6 +147,9 @@ const handleUserMenuClick = async ({ key }: { key: string }) => {
 </script>
 
 <style lang="scss" scoped>
+@import '@/styles/responsive.scss';
+@import '@/styles/utilities.scss';
+
 .main-header {
   height: 64px;
   display: flex;

@@ -114,6 +114,9 @@ onMounted(() => {
 </script>
 
 <style scoped lang="scss">
+@import '@/styles/responsive.scss';
+@import '@/styles/utilities.scss';
+
 .main-layout {
   min-height: 100vh;
   background-color: var(--color-background);

@@ -15,17 +15,11 @@ export const authGuard = async (
   const requiresAuth = to.meta.requiresAuth !== false
   const redirectIfAuth = to.meta.redirectIfAuth === true
   
-  // 如果有token但用户信息为空，尝试获取用户信息
-  if (authStore.token && !authStore.user && !authStore.isLoading) {
-    try {
-      await authStore.checkAuth()
-    } catch (error) {
-      console.warn('认证检查失败:', error)
-    }
-  }
+  // 使用store中的认证状态而不是直接检查localStorage
+  const isAuthenticated = authStore.isAuthenticated
   
   // 如果页面需要认证但用户未登录
-  if (requiresAuth && !authStore.isAuthenticated) {
+  if (requiresAuth && !isAuthenticated) {
     // 保存用户想要访问的页面，登录后重定向
     const redirectPath = to.fullPath !== '/login' ? to.fullPath : '/dashboard'
     next({
@@ -36,7 +30,7 @@ export const authGuard = async (
   }
   
   // 如果用户已登录但访问登录/注册页面，重定向到dashboard
-  if (redirectIfAuth && authStore.isAuthenticated) {
+  if (redirectIfAuth && isAuthenticated) {
     const redirectPath = (to.query.redirect as string) || '/dashboard'
     next(redirectPath)
     return

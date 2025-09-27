@@ -9,7 +9,7 @@ const routes: RouteRecordRaw[] = [
   // 根路径重定向
   {
     path: '/',
-    redirect: ROUTES.DASHBOARD,
+    redirect: ROUTES.LOGIN,
   },
   
   // 认证相关路由 - 高优先级预加载
@@ -51,7 +51,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import(
       /* webpackChunkName: "dashboard-page" */
       /* webpackPreload: true */
-      '@/views/dashboard/Dashboard.vue'
+      '@/views/Dashboard.vue'
     ),
     meta: { 
       requiresAuth: true,
@@ -152,6 +152,34 @@ const routes: RouteRecordRaw[] = [
   },
   
   // 错误页面 - 低优先级懒加载
+  // 调试页面路由
+  {
+    path: '/debug',
+    name: 'Debug',
+    component: () => import(
+      /* webpackChunkName: "debug-page" */
+      '@/views/DebugInfo.vue'
+    ),
+    meta: { 
+      requiresAuth: false,
+      title: '调试信息' 
+    },
+  },
+  
+  // 路由测试页面
+  {
+    path: '/test-routes',
+    name: 'TestRoutes',
+    component: () => import(
+      /* webpackChunkName: "test-page" */
+      '@/views/TestRoutes.vue'
+    ),
+    meta: { 
+      requiresAuth: false,
+      title: '路由测试' 
+    },
+  },
+
   {
     path: '/401',
     name: ROUTE_NAMES.UNAUTHORIZED,
@@ -176,6 +204,34 @@ const routes: RouteRecordRaw[] = [
       title: '访问被拒绝'
     },
   },
+  
+  // 开发环境测试路由
+  ...(import.meta.env.DEV ? [
+    {
+      path: '/dev',
+      name: 'DevTest',
+      component: () => import(
+        /* webpackChunkName: "dev-pages" */
+        '@/views/dev/TestPage.vue'
+      ),
+      meta: { 
+        requiresAuth: false,
+        title: '前端功能测试'
+      },
+    },
+    {
+      path: '/dev/mock',
+      name: 'MockTest',
+      component: () => import(
+        /* webpackChunkName: "dev-pages" */
+        '@/views/dev/MockTestPage.vue'
+      ),
+      meta: { 
+        requiresAuth: false,
+        title: 'Mock数据测试'
+      },
+    }
+  ] : []),
   
   // 404 页面 - 必须放在最后
   {
