@@ -34,10 +34,6 @@ export function useAuth() {
   const login = async (credentials: LoginCredentials): Promise<AuthResponse> => {
     try {
       const response = await authStore.login(credentials);
-      
-      // 登录成功后重定向到主工作台
-      await router.push('/dashboard');
-      
       return response;
     } catch (error) {
       // 错误已在store中处理，这里只需要重新抛出
