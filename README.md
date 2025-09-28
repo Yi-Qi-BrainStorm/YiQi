@@ -54,13 +54,36 @@ pnpm install
 
 ### 启动开发环境
 
+#### 一键启动（推荐）
+
+```bash
+# 启动前后端服务
+./start-dev.sh
+
+# 停止所有服务
+./stop-dev.sh
+```
+
+#### 手动启动
+
 ```bash
 # 启动前端开发服务器
 pnpm dev
 
 # 或者单独启动前端
 pnpm --filter frontend dev
+
+# 启动后端服务（需要单独终端）
+cd backend
+mvn spring-boot:run
 ```
+
+#### 服务地址
+
+- **前端应用**: http://localhost:5173
+- **后端API**: http://localhost:8080
+- **API文档**: http://localhost:8080/swagger-ui.html
+- **集成测试**: http://localhost:5173/dev/backend-integration
 
 ### 构建项目
 
@@ -93,10 +116,33 @@ pnpm --filter frontend test
 
 ## 开发指南
 
-详细的开发指南请参考各子项目的README文件：
+### 前后端联调
 
-- [前端开发指南](./frontend/README.md)
-- [后端开发指南](./backend/README.md)
+本项目已完成前后端API集成，支持以下功能：
+
+1. **用户认证**: 注册、登录、JWT token管理
+2. **代理管理**: 创建、编辑、删除AI代理
+3. **会话管理**: 创建、启动、控制头脑风暴会话
+4. **Mock模式**: 开发时自动切换Mock/真实API
+
+#### 联调测试
+
+访问集成测试页面进行前后端连接测试：
+```
+http://localhost:5173/dev/backend-integration
+```
+
+该页面提供：
+- 后端连接状态检查
+- API端点功能测试  
+- Mock模式切换
+- 实时测试日志
+
+#### API文档
+
+- **前后端集成指南**: [BACKEND_INTEGRATION_GUIDE.md](./frontend/BACKEND_INTEGRATION_GUIDE.md)
+- **前端开发指南**: [frontend/README.md](./frontend/README.md)
+- **后端开发指南**: [backend/README.md](./backend/README.md)
 
 ## 项目规格
 

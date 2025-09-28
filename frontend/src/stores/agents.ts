@@ -53,9 +53,45 @@ export const useAgentStore = defineStore('agents', () => {
     error.value = null;
     
     try {
-      const response = await agentService.getAgents(params);
-      agents.value = response.items;
-      pagination.value = response.pagination;
+      const response = await agentService.getAgents({
+        status: params?.status,
+      });
+      
+      // 后端直接返回数组，前端进行过滤和分页
+      let filteredAgents = response;
+      
+      // 应用搜索过滤
+      if (params?.search) {
+        const searchTerm = params.search.toLowerCase();
+        filteredAgents = filteredAgents.filter(agent => 
+          agent.name.toLowerCase().includes(searchTerm) ||
+          agent.roleType.toLowerCase().includes(searchTerm)
+        );
+      }
+      
+      // 应用角色类型过滤
+      if (params?.roleType) {
+        filteredAgents = filteredAgents.filter(agent => 
+          agent.roleType === params.roleType
+        );
+      }
+      
+      // 计算分页
+      const page = params?.page || 1;
+      const limit = params?.limit || 20;
+      const startIndex = (page - 1) * limit;
+      const endIndex = startIndex + limit;
+      const paginatedAgents = filteredAgents.slice(startIndex, endIndex);
+      
+      agents.value = paginatedAgents;
+      pagination.value = {
+        page,
+        limit,
+        total: filteredAgents.length,
+        totalPages: Math.ceil(filteredAgents.length / limit),
+        hasNext: endIndex < filteredAgents.length,
+        hasPrev: page > 1
+      };
     } catch (err: any) {
       error.value = err.message || '获取代理列表失败';
       throw err;
