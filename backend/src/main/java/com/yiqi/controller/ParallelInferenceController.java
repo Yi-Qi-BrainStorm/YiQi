@@ -9,6 +9,7 @@ import com.yiqi.service.AIInferenceService;
 import com.yiqi.service.AgentService;
 import com.yiqi.service.SessionService;
 import com.yiqi.service.InferenceStatusService;
+import com.yiqi.service.QiniuAIService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -49,6 +50,9 @@ public class ParallelInferenceController {
     
     @Autowired
     private InferenceStatusService inferenceStatusService;
+    
+    @Autowired
+    private QiniuAIService qiniuAIService;
 
     /**
      * 触发会话阶段的并行推理
