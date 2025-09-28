@@ -19,7 +19,7 @@ public enum SessionStatus {
     IN_PROGRESS("进行中"),
     
     /**
-     * 已暂停 - 会话已暂停
+     * 已暂停 - 会话已经暂停
      */
     PAUSED("已暂停"),
     

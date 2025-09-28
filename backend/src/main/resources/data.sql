@@ -40,4 +40,4 @@ INSERT INTO session_agents (session_id, agent_id, status) VALUES
 INSERT INTO phases (session_id, phase_type, status) VALUES 
 (1, 'IDEA_GENERATION', 'NOT_STARTED'),
 (1, 'FEASIBILITY_ANALYSIS', 'NOT_STARTED'),
-(1, 'CRITICISM_DISCUSSION', 'NOT_STARTED');
+(1, 'DRAWBACK_DISCUSSION', 'NOT_STARTED');

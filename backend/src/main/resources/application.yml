@@ -11,7 +11,7 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3306/yiqi_brainstorm?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     username: ${DB_USERNAME:root}
-    password: ${DB_PASSWORD:2054865827}
+    password: ${DB_PASSWORD:mayuhao666.}
     hikari:
       maximum-pool-size: 20
       minimum-idle: 5
@@ -55,6 +55,15 @@ mybatis-plus:
       logic-delete-value: 1
       logic-not-delete-value: 0
   mapper-locations: classpath*:mapper/*.xml
+
+# 七牛云API配置
+qiniu:
+  api:
+    key: ${QINIU_API_KEY:sk-5989d9479592a2c28c52a6e15be54ed4ceb27d8b37e72547b3d5c63a130dd1ae}
+    url: ${QINIU_API_URL:https://openai.qiniu.com/v1/chat/completions}
+    model: ${QINIU_API_MODEL:deepseek-v3-0324}
+    timeout: 30000
+    retry-attempts: 3
 
 # 意启平台自定义配置
 yiqi:

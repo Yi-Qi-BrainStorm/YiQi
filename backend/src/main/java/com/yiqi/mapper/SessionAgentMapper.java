@@ -1,14 +1,15 @@
 package com.yiqi.mapper;
 
-import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.yiqi.entity.SessionAgent;
-import com.yiqi.enums.AgentStatus;
+import java.util.List;
+
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
-import org.apache.ibatis.annotations.Delete;
 
-import java.util.List;
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.yiqi.entity.SessionAgent;
+import com.yiqi.enums.AgentStatus;
 
 /**
  * 会话代理关联数据访问层
