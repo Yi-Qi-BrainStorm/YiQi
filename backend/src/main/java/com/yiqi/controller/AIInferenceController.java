@@ -43,25 +43,121 @@ public class AIInferenceController {
      * 处理单个代理推理请求
      */
     @PostMapping("/agent")
-    public CompletableFuture<ResponseEntity<AgentInferenceResponse>> processAgentInference(
-            @RequestBody AgentInferenceRequest request) {
+    public Object processAgentInference(
+            @RequestBody AgentInferenceRequest request,
+            @RequestParam(defaultValue = "false") boolean stream) {
         
-        logger.info("收到单代理推理请求: agentId={}", request.getAgentId());
-        
-        return aiInferenceService.processAgentInference(request)
-            .thenApply(response -> {
-                if (response.isSuccess()) {
-                    return ResponseEntity.ok(response);
-                } else {
-                    return ResponseEntity.status(500).body(response);
+        if (stream) {
+            // 流式输出
+            logger.info("收到单代理流式推理请求: agentId={}", request.getAgentId());
+            
+            // 设置较长的超时时间（300秒）
+            ResponseBodyEmitter emitter = new ResponseBodyEmitter(300000L);
+            
+            // 使用原子布尔值跟踪emitter是否已完成
+            java.util.concurrent.atomic.AtomicBoolean emitterCompleted = new java.util.concurrent.atomic.AtomicBoolean(false);
+            
+            // 注册超时和完成的回调
+            emitter.onTimeout(() -> {
+                logger.warn("流式输出超时: agentId={}", request.getAgentId());
+                if (!emitterCompleted.getAndSet(true)) {
+                    emitter.complete();
                 }
-            })
-            .exceptionally(throwable -> {
-                logger.error("单代理推理处理异常", throwable);
-                AgentInferenceResponse errorResponse = new AgentInferenceResponse();
-                errorResponse.markFailure("处理异常: " + throwable.getMessage());
-                return ResponseEntity.status(500).body(errorResponse);
             });
+            
+            emitter.onError((throwable) -> {
+                logger.error("流式输出错误: agentId={}", request.getAgentId(), throwable);
+                emitterCompleted.set(true);
+            });
+            
+            emitter.onCompletion(() -> {
+                logger.info("流式输出完成: agentId={}", request.getAgentId());
+                emitterCompleted.set(true);
+            });
+            
+            // 使用流式AI服务处理请求
+            qiniuAIService.sendStreamingInferenceRequest(
+                request.getSystemPrompt(),
+                request.getUserPrompt(),
+                new QiniuAIService.StreamingResponseHandler() {
+                    @Override
+                    public void onData(String data) {
+                        // 检查emitter是否已经完成
+                        if (emitterCompleted.get()) {
+                            logger.debug("emitter已完成后收到数据，忽略: agentId={}", request.getAgentId());
+                            return;
+                        }
+                        
+                        try {
+                            // 发送数据片段
+                            emitter.send(data);
+                        } catch (IllegalStateException e) {
+                            logger.warn("发送流式数据时emitter已关闭: agentId={}", request.getAgentId());
+                            emitterCompleted.set(true);
+                        } catch (Exception e) {
+                            logger.error("发送流式数据失败: agentId={}", request.getAgentId(), e);
+                            if (!emitterCompleted.getAndSet(true)) {
+                                try {
+                                    emitter.completeWithError(e);
+                                } catch (Exception ex) {
+                                    logger.error("完成emitter时发生异常: agentId={}", request.getAgentId(), ex);
+                                }
+                            }
+                        }
+                    }
+                    
+                    @Override
+                    public void onComplete() {
+                        // 完成流式输出
+                        if (!emitterCompleted.getAndSet(true)) {
+                            try {
+                                emitter.send("[DONE]");
+                                emitter.complete();
+                            } catch (IllegalStateException e) {
+                                logger.warn("完成流式输出时emitter已关闭: agentId={}", request.getAgentId());
+                            } catch (Exception e) {
+                                logger.error("完成流式输出失败: agentId={}", request.getAgentId(), e);
+                            }
+                        }
+                    }
+                    
+                    @Override
+                    public void onError(Throwable throwable) {
+                        // 处理错误
+                        logger.error("流式推理处理异常: agentId={}", request.getAgentId(), throwable);
+                        if (!emitterCompleted.getAndSet(true)) {
+                            try {
+                                emitter.completeWithError(throwable);
+                            } catch (IllegalStateException e) {
+                                logger.warn("完成emitter时emitter已关闭: agentId={}", request.getAgentId());
+                            } catch (Exception e) {
+                                logger.error("完成emitter时发生异常: agentId={}", request.getAgentId(), e);
+                            }
+                        }
+                    }
+                }
+            );
+            
+            return emitter;
+        } else {
+            // 普通输出
+            logger.info("收到单代理推理请求: agentId={}", request.getAgentId());
+            
+            return aiInferenceService.processAgentInference(request)
+                .thenApply(response -> {
+                    if (response.isSuccess()) {
+                        return ResponseEntity.ok(response);
+                    } else {
+                        return ResponseEntity.status(500).body(response);
+                    }
+                })
+                .exceptionally(throwable -> {
+                    logger.error("单代理推理处理异常", throwable);
+                    AgentInferenceResponse errorResponse = new AgentInferenceResponse();
+                    errorResponse.markFailure("处理异常: " + throwable.getMessage());
+                    return ResponseEntity.status(500).body(errorResponse);
+                });
+        }
     }
 
     /**
@@ -125,6 +221,9 @@ public class AIInferenceController {
         
         ResponseBodyEmitter emitter = new ResponseBodyEmitter();
         
+        // 使用原子布尔值跟踪emitter是否已完成
+        java.util.concurrent.atomic.AtomicBoolean emitterCompleted = new java.util.concurrent.atomic.AtomicBoolean(false);
+        
         // 使用流式AI服务处理请求
         qiniuAIService.sendStreamingInferenceRequest(
             request.getSystemPrompt(),
@@ -132,26 +231,42 @@ public class AIInferenceController {
             new QiniuAIService.StreamingResponseHandler() {
                 @Override
                 public void onData(String data) {
+                    // 检查emitter是否已经完成
+                    if (emitterCompleted.get()) {
+                        return;
+                    }
+                    
                     try {
                         // 发送数据片段
                         emitter.send(data);
                     } catch (Exception e) {
                         logger.error("发送流式数据失败", e);
-                        emitter.completeWithError(e);
+                        if (!emitterCompleted.getAndSet(true)) {
+                            emitter.completeWithError(e);
+                        }
                     }
                 }
                 
                 @Override
                 public void onComplete() {
                     // 完成流式输出
-                    emitter.complete();
+                    if (!emitterCompleted.getAndSet(true)) {
+                        try {
+                            emitter.send("[DONE]");
+                            emitter.complete();
+                        } catch (Exception e) {
+                            logger.error("完成流式输出失败", e);
+                        }
+                    }
                 }
                 
                 @Override
                 public void onError(Throwable throwable) {
                     // 处理错误
                     logger.error("流式推理处理异常", throwable);
-                    emitter.completeWithError(throwable);
+                    if (!emitterCompleted.getAndSet(true)) {
+                        emitter.completeWithError(throwable);
+                    }
                 }
             }
         );

@@ -18,7 +18,7 @@ AI 推理控制器提供了意启头脑风暴平台的 AI 推理相关 REST API 
 
 **接口地址**: `POST /api/ai-inference/agent`
 
-**接口描述**: 处理单个 AI 代理的推理请求，支持异步处理
+**接口描述**: 处理单个 AI 代理的推理请求，支持异步处理和流式输出
 
 **请求头**:
 
@@ -26,6 +26,11 @@ AI 推理控制器提供了意启头脑风暴平台的 AI 推理相关 REST API 
 Content-Type: application/json
 Authorization: Bearer {token}
 ```
+
+**请求参数**:
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| stream | Boolean | 否 | 是否启用流式输出，默认为false |
 
 **请求体**:
 
@@ -51,6 +56,8 @@ Authorization: Bearer {token}
 | sessionContext | String | 否 | 会话上下文 |
 
 **响应示例**:
+
+非流式响应 (200):
 
 成功响应 (200):
 
@@ -96,6 +103,33 @@ Authorization: Bearer {token}
 | startTime | String | 开始时间 |
 | endTime | String | 结束时间 |
 | processingTimeMs | Long | 处理时长（毫秒） |
+
+流式响应 (200):
+
+当stream=true时，响应使用 Server-Sent Events (SSE) 格式，每个数据块包含以下字段：
+| 字段名 | 类型 | 说明 |
+|--------|------|------|
+| id | String | 响应 ID |
+| object | String | 对象类型 |
+| created | Long | 创建时间戳 |
+| model | String | 使用的模型 |
+| choices | Array | 选择项数组 |
+| choices[index] | Integer | 选择项索引 |
+| choices[delta] | Object | 增量内容 |
+| choices[delta][content] | String | 增量内容片段 |
+| choices[finish_reason] | String | 完成原因 (null表示未完成，"stop"表示完成) |
+
+流式响应示例：
+
+```
+data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1704060000,"model":"deepseek/deepseek-v3.1-terminus","choices":[{"index":0,"delta":{"content":"基于智能家居"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1704060000,"model":"deepseek/deepseek-v3.1-terminus","choices":[{"index":0,"delta":{"content":"的需求"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1704060000,"model":"deepseek/deepseek-v3.1-terminus","choices":[{"index":0,"delta":{"content":"，我建议"},"finish_reason":null}]}
+
+data: [DONE]
+```
 
 ---
 
@@ -353,193 +387,3 @@ Authorization: Bearer {token}
 | INVALID_AGENT_REQUEST     | 无效的代理请求 | 400         |
 | SESSION_NOT_FOUND         | 会话未找到     | 404         |
 
----
-
-## 使用示例
-
-### JavaScript/Fetch 示例
-
-```javascript
-// 单代理推理请求
-async function processAgentInference(agentRequest) {
-  try {
-    const response = await fetch("/api/ai-inference/agent", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer " + token,
-      },
-      body: JSON.stringify(agentRequest),
-    });
-
-    const result = await response.json();
-
-    if (result.status === "SUCCESS") {
-      console.log("推理成功:", result.content);
-    } else {
-      console.error("推理失败:", result.errorMessage);
-    }
-
-    return result;
-  } catch (error) {
-    console.error("请求失败:", error);
-    throw error;
-  }
-}
-
-// 查询推理状态
-async function getInferenceStatus(sessionId, phaseType) {
-  try {
-    const response = await fetch(
-      `/api/ai-inference/status/${sessionId}/${phaseType}`,
-      {
-        headers: {
-          Authorization: "Bearer " + token,
-        },
-      }
-    );
-
-    if (response.ok) {
-      const status = await response.json();
-      console.log("推理进度:", (status.progress * 100).toFixed(1) + "%");
-      return status;
-    } else {
-      console.log("状态未找到");
-      return null;
-    }
-  } catch (error) {
-    console.error("查询状态失败:", error);
-    throw error;
-  }
-}
-
-// 测试AI服务
-async function testAIService() {
-  try {
-    const response = await fetch("/api/ai-inference/test", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer " + token,
-      },
-      body: JSON.stringify({
-        systemPrompt: "You are a helpful assistant.",
-        userPrompt: "Hello, please respond to confirm the service is working.",
-      }),
-    });
-
-    const result = await response.text();
-    console.log("AI服务测试结果:", result);
-    return response.ok;
-  } catch (error) {
-    console.error("AI服务测试失败:", error);
-    return false;
-  }
-}
-```
-
-### Java/Spring RestTemplate 示例
-
-```java
-@Service
-public class AIInferenceClient {
-
-    @Autowired
-    private RestTemplate restTemplate;
-
-    private static final String BASE_URL = "http://localhost:8080/api/ai-inference";
-
-    public AgentInferenceResponse processAgentInference(AgentInferenceRequest request) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth(token);
-
-        HttpEntity<AgentInferenceRequest> entity = new HttpEntity<>(request, headers);
-
-        try {
-            ResponseEntity<AgentInferenceResponse> response = restTemplate.postForEntity(
-                BASE_URL + "/agent", entity, AgentInferenceResponse.class
-            );
-
-            return response.getBody();
-        } catch (Exception e) {
-            log.error("代理推理请求失败", e);
-            throw new RuntimeException("推理请求失败: " + e.getMessage());
-        }
-    }
-
-    public SessionInferenceStatus getInferenceStatus(String sessionId, String phaseType) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(token);
-
-        HttpEntity<?> entity = new HttpEntity<>(headers);
-
-        try {
-            ResponseEntity<SessionInferenceStatus> response = restTemplate.exchange(
-                BASE_URL + "/status/" + sessionId + "/" + phaseType,
-                HttpMethod.GET, entity, SessionInferenceStatus.class
-            );
-
-            return response.getBody();
-        } catch (HttpClientErrorException.NotFound e) {
-            return null;
-        } catch (Exception e) {
-            log.error("查询推理状态失败", e);
-            throw new RuntimeException("状态查询失败: " + e.getMessage());
-        }
-    }
-}
-```
-
----
-
-## 性能指标
-
-### 响应时间
-
-- **单代理推理**: 3-8 秒（取决于 AI 模型响应时间）
-- **状态查询**: < 100ms
-- **统计信息**: < 200ms
-- **服务测试**: 2-5 秒
-
-### 并发支持
-
-- **最大并发代理数**: 10 个
-- **推理队列容量**: 100 个任务
-- **超时设置**: 单次 60 秒，总体 120 秒
-
-### 可靠性
-
-- **重试机制**: 最多 3 次，指数退避
-- **熔断保护**: 5 次连续失败触发
-- **成功率目标**: >95%
-
----
-
-## 注意事项
-
-1. **异步处理**: 单代理推理接口返回 CompletableFuture，支持异步处理
-2. **超时控制**: 设置了合理的超时时间，避免长时间等待
-3. **错误恢复**: 实现了完善的错误处理和重试机制
-4. **状态跟踪**: 提供实时的推理状态监控
-5. **资源管理**: 使用专用线程池，避免资源竞争
-
----
-
-## 更新日志
-
-- **v1.0.0** (2024-01-15): 初始版本发布，包含基础推理功能
-- 支持单代理推理处理
-- 提供推理状态查询
-- 实现 AI 服务测试功能
-- 添加系统统计接口
-
----
-
-## 技术支持
-
-如有问题或建议，请联系开发团队：
-
-- **邮箱**: dev@yiqi-platform.com
-- **文档**: [API 文档中心](http://docs.yiqi-platform.com)
-- **监控**: [服务监控面板](http://monitor.yiqi-platform.com)

@@ -59,64 +59,216 @@ public class ParallelInferenceController {
      */
     @PostMapping("/sessions/{sessionId}/phases/{phaseType}/execute")
     @Operation(summary = "执行会话阶段推理", description = "触发指定会话和阶段的多代理并行推理")
-    public DeferredResult<ResponseEntity<ParallelInferenceResult>> executeSessionPhaseInference(
+    public Object executeSessionPhaseInference(
             @Parameter(description = "会话ID") @PathVariable Long sessionId,
             @Parameter(description = "阶段类型") @PathVariable PhaseType phaseType,
             @Valid @RequestBody SessionPhaseInferenceRequest request,
+            @RequestParam(defaultValue = "false") boolean stream,
             Authentication authentication) {
         
-        logger.info("收到会话阶段推理请求: sessionId={}, phaseType={}", sessionId, phaseType);
-        
-        // 验证会话所有权
-        validateSessionOwnership(sessionId, authentication);
-        
-        // 创建DeferredResult，设置120秒超时时间
-        DeferredResult<ResponseEntity<ParallelInferenceResult>> deferredResult = new DeferredResult<>(120000L);
-        
-        // 在新线程中执行推理任务
-        CompletableFuture.supplyAsync(() -> {
-            try {
-                // 获取会话信息
-                BrainstormSession session = sessionService.getSessionById(sessionId);
-                
-                // 获取会话的活跃代理
-                List<Agent> agents = sessionService.getSessionAgents(sessionId);
-                
-                if (agents.isEmpty()) {
-                    throw new IllegalStateException("会话没有配置任何代理");
+        if (stream) {
+            // 流式输出
+            logger.info("收到会话阶段流式推理请求: sessionId={}, phaseType={}", sessionId, phaseType);
+            
+            // 验证会话所有权
+            validateSessionOwnership(sessionId, authentication);
+            
+            // 设置较长的超时时间（300秒）
+            ResponseBodyEmitter emitter = new ResponseBodyEmitter(300000L);
+            
+            // 使用原子计数器跟踪完成的代理数量
+            java.util.concurrent.atomic.AtomicInteger completedAgents = new java.util.concurrent.atomic.AtomicInteger(0);
+            java.util.concurrent.atomic.AtomicBoolean emitterCompleted = new java.util.concurrent.atomic.AtomicBoolean(false);
+            
+            // 注册超时和完成的回调
+            emitter.onTimeout(() -> {
+                logger.warn("会话阶段流式输出超时: sessionId={}, phaseType={}", sessionId, phaseType);
+                if (!emitterCompleted.getAndSet(true)) {
+                    emitter.complete();
                 }
-                
-                // 构建会话上下文
-                String sessionContext = buildSessionContext(session, request.getAdditionalContext());
-                
-                // 执行并行推理
-                ParallelInferenceResult result = aiInferenceService.processParallelInference(
-                    agents,
-                    request.getUserPrompt(),
-                    sessionContext,
-                    sessionId.toString(),
-                    phaseType
-                );
-                
-                logger.info("会话阶段推理完成: sessionId={}, phaseType={}, 成功率={:.2f}%", 
-                           sessionId, phaseType, result.getSuccessRate() * 100);
-                
-                return ResponseEntity.ok(result);
-                
-            } catch (Exception e) {
-                logger.error("会话阶段推理失败: sessionId={}, phaseType={}", sessionId, phaseType, e);
-                return ResponseEntity.status(500).<ParallelInferenceResult>body(null);
-            }
-        }).whenComplete((result, throwable) -> {
-            if (throwable != null) {
-                logger.error("异步处理异常", throwable);
-                deferredResult.setErrorResult(throwable);
-            } else {
-                deferredResult.setResult(result);
-            }
-        });
-        
-        return deferredResult;
+            });
+            
+            emitter.onError((throwable) -> {
+                logger.error("会话阶段流式输出错误: sessionId={}, phaseType={}", sessionId, phaseType, throwable);
+                emitterCompleted.set(true);
+            });
+            
+            emitter.onCompletion(() -> {
+                logger.info("会话阶段流式输出完成: sessionId={}, phaseType={}", sessionId, phaseType);
+                emitterCompleted.set(true);
+            });
+            
+            // 在新线程中执行流式推理任务
+            CompletableFuture.runAsync(() -> {
+                try {
+                    // 获取会话信息
+                    BrainstormSession session = sessionService.getSessionById(sessionId);
+                    
+                    // 获取会话的活跃代理
+                    List<Agent> agents = sessionService.getSessionAgents(sessionId);
+                    
+                    if (agents.isEmpty()) {
+                        throw new IllegalStateException("会话没有配置任何代理");
+                    }
+                    
+                    // 构建会话上下文
+                    String sessionContext = buildSessionContext(session, request.getAdditionalContext());
+                    
+                    // 为每个代理创建流式推理请求
+                    for (Agent agent : agents) {
+                        // 构建系统提示词
+                        String systemPrompt = phaseType.getSystemPromptTemplate()
+                            .replace("{roleType}", agent.getRoleType());
+                        
+                        // 如果代理有自定义系统提示词，则追加
+                        if (agent.getSystemPrompt() != null && !agent.getSystemPrompt().trim().isEmpty()) {
+                            systemPrompt += "\n\n" + agent.getSystemPrompt();
+                        }
+                        
+                        // 构建用户提示词
+                        String finalUserPrompt = phaseType.getUserPromptTemplate()
+                            .replace("{topic}", request.getUserPrompt())
+                            .replace("{context}", sessionContext != null ? sessionContext : "");
+                        
+                        // 发送流式推理请求
+                        qiniuAIService.sendStreamingInferenceRequest(
+                            systemPrompt,
+                            finalUserPrompt,
+                            new QiniuAIService.StreamingResponseHandler() {
+                                @Override
+                                public void onData(String data) {
+                                    // 检查emitter是否已经完成
+                                    if (emitterCompleted.get()) {
+                                        logger.debug("emitter已完成后收到数据，忽略: agentId={}", agent.getId());
+                                        return;
+                                    }
+                                    
+                                    try {
+                                        // 发送数据片段，包含代理ID和名称
+                                        String response = String.format("{\"agentId\":%d,\"agentName\":\"%s\",\"data\":%s}",
+                                            agent.getId(), agent.getName(), data);
+                                        emitter.send(response);
+                                    } catch (IllegalStateException e) {
+                                        logger.warn("发送流式数据时emitter已关闭: agentId={}", agent.getId());
+                                        emitterCompleted.set(true);
+                                    } catch (Exception e) {
+                                        logger.error("发送流式数据失败: agentId={}", agent.getId(), e);
+                                        if (!emitterCompleted.getAndSet(true)) {
+                                            try {
+                                                emitter.completeWithError(e);
+                                            } catch (Exception ex) {
+                                                logger.error("完成emitter时发生异常: agentId={}", agent.getId(), ex);
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                @Override
+                                public void onComplete() {
+                                    // 检查是否所有代理都已完成
+                                    int completed = completedAgents.incrementAndGet();
+                                    if (completed == agents.size() && !emitterCompleted.getAndSet(true)) {
+                                        try {
+                                            emitter.send("[DONE]");
+                                            emitter.complete();
+                                        } catch (IllegalStateException e) {
+                                            logger.warn("完成流式输出时emitter已关闭: sessionId={}", sessionId);
+                                        } catch (Exception e) {
+                                            logger.error("完成流式输出失败: sessionId={}", sessionId, e);
+                                        }
+                                    }
+                                }
+                                
+                                @Override
+                                public void onError(Throwable throwable) {
+                                    logger.error("代理{}流式推理处理异常", agent.getId(), throwable);
+                                    // 检查是否所有代理都已完成或出错
+                                    int completed = completedAgents.incrementAndGet();
+                                    if (completed == agents.size() && !emitterCompleted.getAndSet(true)) {
+                                        try {
+                                            emitter.complete();
+                                        } catch (IllegalStateException e) {
+                                            logger.warn("完成emitter时emitter已关闭: sessionId={}", sessionId);
+                                        } catch (Exception e) {
+                                            logger.error("完成emitter时发生异常: sessionId={}", sessionId, e);
+                                        }
+                                    }
+                                }
+                            }
+                        );
+                    }
+                    
+                } catch (Exception e) {
+                    logger.error("会话阶段流式推理失败: sessionId={}, phaseType={}", sessionId, phaseType, e);
+                    // 确保emitter被完成
+                    if (!emitterCompleted.getAndSet(true)) {
+                        try {
+                            emitter.completeWithError(e);
+                        } catch (IllegalStateException ex) {
+                            logger.warn("完成emitter时emitter已关闭: sessionId={}", sessionId);
+                        } catch (Exception ex) {
+                            logger.error("完成emitter时发生异常: sessionId={}", sessionId, ex);
+                        }
+                    }
+                }
+            });
+            
+            return emitter;
+        } else {
+            // 普通输出
+            logger.info("收到会话阶段推理请求: sessionId={}, phaseType={}", sessionId, phaseType);
+            
+            // 验证会话所有权
+            validateSessionOwnership(sessionId, authentication);
+            
+            // 创建DeferredResult，设置120秒超时时间
+            DeferredResult<ResponseEntity<ParallelInferenceResult>> deferredResult = new DeferredResult<>(120000L);
+            
+            // 在新线程中执行推理任务
+            CompletableFuture.supplyAsync(() -> {
+                try {
+                    // 获取会话信息
+                    BrainstormSession session = sessionService.getSessionById(sessionId);
+                    
+                    // 获取会话的活跃代理
+                    List<Agent> agents = sessionService.getSessionAgents(sessionId);
+                    
+                    if (agents.isEmpty()) {
+                        throw new IllegalStateException("会话没有配置任何代理");
+                    }
+                    
+                    // 构建会话上下文
+                    String sessionContext = buildSessionContext(session, request.getAdditionalContext());
+                    
+                    // 执行并行推理
+                    ParallelInferenceResult result = aiInferenceService.processParallelInference(
+                        agents,
+                        request.getUserPrompt(),
+                        sessionContext,
+                        sessionId.toString(),
+                        phaseType
+                    );
+                    
+                    logger.info("会话阶段推理完成: sessionId={}, phaseType={}, 成功率={:.2f}%", 
+                               sessionId, phaseType, result.getSuccessRate() * 100);
+                    
+                    return ResponseEntity.ok(result);
+                    
+                } catch (Exception e) {
+                    logger.error("会话阶段推理失败: sessionId={}, phaseType={}", sessionId, phaseType, e);
+                    return ResponseEntity.status(500).<ParallelInferenceResult>body(null);
+                }
+            }).whenComplete((result, throwable) -> {
+                if (throwable != null) {
+                    logger.error("异步处理异常", throwable);
+                    deferredResult.setErrorResult(throwable);
+                } else {
+                    deferredResult.setResult(result);
+                }
+            });
+            
+            return deferredResult;
+        }
     }
 
     /**
@@ -124,57 +276,193 @@ public class ParallelInferenceController {
      */
     @PostMapping("/custom")
     @Operation(summary = "自定义代理并行推理", description = "使用指定的代理列表进行并行推理")
-    public DeferredResult<ResponseEntity<ParallelInferenceResult>> executeCustomParallelInference(
+    public Object executeCustomParallelInference(
             @Valid @RequestBody CustomParallelInferenceRequest request,
+            @RequestParam(defaultValue = "false") boolean stream,
             Authentication authentication) {
         
-        logger.info("收到自定义并行推理请求: agentCount={}, phaseType={}", 
-                   request.getAgentIds().size(), request.getPhaseType());
-        
-        // 创建DeferredResult，设置120秒超时时间
-        DeferredResult<ResponseEntity<ParallelInferenceResult>> deferredResult = new DeferredResult<>(120000L);
-        
-        // 在新线程中执行推理任务
-        CompletableFuture.supplyAsync(() -> {
-            try {
-                // 获取指定的代理列表
-                List<Agent> agents = agentService.getAgentsByIds(request.getAgentIds());
-                
-                if (agents.isEmpty()) {
-                    throw new IllegalArgumentException("未找到指定的代理");
+        if (stream) {
+            // 流式输出
+            logger.info("收到自定义流式并行推理请求: agentCount={}, phaseType={}", 
+                       request.getAgentIds().size(), request.getPhaseType());
+            
+            // 设置较长的超时时间（300秒）
+            ResponseBodyEmitter emitter = new ResponseBodyEmitter(300000L);
+            
+            // 使用原子计数器跟踪完成的代理数量
+            java.util.concurrent.atomic.AtomicInteger completedAgents = new java.util.concurrent.atomic.AtomicInteger(0);
+            java.util.concurrent.atomic.AtomicBoolean emitterCompleted = new java.util.concurrent.atomic.AtomicBoolean(false);
+            
+            // 注册超时和完成的回调
+            emitter.onTimeout(() -> {
+                logger.warn("自定义流式并行推理超时: agentCount={}, phaseType={}", 
+                           request.getAgentIds().size(), request.getPhaseType());
+                if (!emitterCompleted.getAndSet(true)) {
+                    emitter.complete();
                 }
-                
-                // 验证代理所有权
-                validateAgentsOwnership(agents, authentication);
-                
-                // 执行并行推理
-                ParallelInferenceResult result = aiInferenceService.processParallelInference(
-                    agents,
-                    request.getUserPrompt(),
-                    request.getSessionContext(),
-                    request.getSessionId(),
-                    request.getPhaseType()
-                );
-                
-                logger.info("自定义并行推理完成: sessionId={}, 成功率={:.2f}%", 
-                           request.getSessionId(), result.getSuccessRate() * 100);
-                
-                return ResponseEntity.ok(result);
-                
-            } catch (Exception e) {
-                logger.error("自定义并行推理失败: sessionId={}", request.getSessionId(), e);
-                return ResponseEntity.status(500).<ParallelInferenceResult>body(null);
-            }
-        }).whenComplete((result, throwable) -> {
-            if (throwable != null) {
-                logger.error("异步处理异常", throwable);
-                deferredResult.setErrorResult(throwable);
-            } else {
-                deferredResult.setResult(result);
-            }
-        });
-        
-        return deferredResult;
+            });
+            
+            emitter.onError((throwable) -> {
+                logger.error("自定义流式并行推理错误: agentCount={}, phaseType={}", 
+                           request.getAgentIds().size(), request.getPhaseType(), throwable);
+                emitterCompleted.set(true);
+            });
+            
+            emitter.onCompletion(() -> {
+                logger.info("自定义流式并行推理完成: agentCount={}, phaseType={}", 
+                           request.getAgentIds().size(), request.getPhaseType());
+                emitterCompleted.set(true);
+            });
+            
+            // 在新线程中执行流式推理任务
+            CompletableFuture.runAsync(() -> {
+                try {
+                    // 获取指定的代理列表
+                    List<Agent> agents = agentService.getAgentsByIds(request.getAgentIds());
+                    
+                    if (agents.isEmpty()) {
+                        throw new IllegalArgumentException("未找到指定的代理");
+                    }
+                    
+                    // 验证代理所有权
+                    validateAgentsOwnership(agents, authentication);
+                    
+                    // 为每个代理创建流式推理请求
+                    for (Agent agent : agents) {
+                        // 发送流式推理请求
+                        qiniuAIService.sendStreamingInferenceRequest(
+                            agent.getSystemPrompt(),
+                            request.getUserPrompt(),
+                            new QiniuAIService.StreamingResponseHandler() {
+                                @Override
+                                public void onData(String data) {
+                                    // 检查emitter是否已经完成
+                                    if (emitterCompleted.get()) {
+                                        logger.debug("emitter已完成后收到数据，忽略: agentId={}", agent.getId());
+                                        return;
+                                    }
+                                    
+                                    try {
+                                        // 发送数据片段，包含代理ID和名称
+                                        String response = String.format("{\"agentId\":%d,\"agentName\":\"%s\",\"data\":%s}",
+                                            agent.getId(), agent.getName(), data);
+                                        emitter.send(response);
+                                    } catch (IllegalStateException e) {
+                                        logger.warn("发送流式数据时emitter已关闭: agentId={}", agent.getId());
+                                        emitterCompleted.set(true);
+                                    } catch (Exception e) {
+                                        logger.error("发送流式数据失败: agentId={}", agent.getId(), e);
+                                        if (!emitterCompleted.getAndSet(true)) {
+                                            try {
+                                                emitter.completeWithError(e);
+                                            } catch (Exception ex) {
+                                                logger.error("完成emitter时发生异常: agentId={}", agent.getId(), ex);
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                @Override
+                                public void onComplete() {
+                                    // 检查是否所有代理都已完成
+                                    int completed = completedAgents.incrementAndGet();
+                                    if (completed == agents.size() && !emitterCompleted.getAndSet(true)) {
+                                        try {
+                                            emitter.send("[DONE]");
+                                            emitter.complete();
+                                        } catch (IllegalStateException e) {
+                                            logger.warn("完成流式输出时emitter已关闭: agentCount={}", request.getAgentIds().size());
+                                        } catch (Exception e) {
+                                            logger.error("完成流式输出失败: agentCount={}", request.getAgentIds().size(), e);
+                                        }
+                                    }
+                                }
+                                
+                                @Override
+                                public void onError(Throwable throwable) {
+                                    logger.error("代理{}流式推理处理异常", agent.getId(), throwable);
+                                    // 检查是否所有代理都已完成或出错
+                                    int completed = completedAgents.incrementAndGet();
+                                    if (completed == agents.size() && !emitterCompleted.getAndSet(true)) {
+                                        try {
+                                            emitter.complete();
+                                        } catch (IllegalStateException e) {
+                                            logger.warn("完成emitter时emitter已关闭: agentCount={}", request.getAgentIds().size());
+                                        } catch (Exception e) {
+                                            logger.error("完成emitter时发生异常: agentCount={}", request.getAgentIds().size(), e);
+                                        }
+                                    }
+                                }
+                            }
+                        );
+                    }
+                    
+                } catch (Exception e) {
+                    logger.error("自定义流式并行推理失败: sessionId={}", request.getSessionId(), e);
+                    // 确保emitter被完成
+                    if (!emitterCompleted.getAndSet(true)) {
+                        try {
+                            emitter.completeWithError(e);
+                        } catch (IllegalStateException ex) {
+                            logger.warn("完成emitter时emitter已关闭: sessionId={}", request.getSessionId());
+                        } catch (Exception ex) {
+                            logger.error("完成emitter时发生异常: sessionId={}", request.getSessionId(), ex);
+                        }
+                    }
+                }
+            });
+            
+            return emitter;
+        } else {
+            // 普通输出
+            logger.info("收到自定义并行推理请求: agentCount={}, phaseType={}", 
+                       request.getAgentIds().size(), request.getPhaseType());
+            
+            // 创建DeferredResult，设置120秒超时时间
+            DeferredResult<ResponseEntity<ParallelInferenceResult>> deferredResult = new DeferredResult<>(120000L);
+            
+            // 在新线程中执行推理任务
+            CompletableFuture.supplyAsync(() -> {
+                try {
+                    // 获取指定的代理列表
+                    List<Agent> agents = agentService.getAgentsByIds(request.getAgentIds());
+                    
+                    if (agents.isEmpty()) {
+                        throw new IllegalArgumentException("未找到指定的代理");
+                    }
+                    
+                    // 验证代理所有权
+                    validateAgentsOwnership(agents, authentication);
+                    
+                    // 执行并行推理
+                    ParallelInferenceResult result = aiInferenceService.processParallelInference(
+                        agents,
+                        request.getUserPrompt(),
+                        request.getSessionContext(),
+                        request.getSessionId(),
+                        request.getPhaseType()
+                    );
+                    
+                    logger.info("自定义并行推理完成: sessionId={}, 成功率={:.2f}%", 
+                               request.getSessionId(), result.getSuccessRate() * 100);
+                    
+                    return ResponseEntity.ok(result);
+                    
+                } catch (Exception e) {
+                    logger.error("自定义并行推理失败: sessionId={}", request.getSessionId(), e);
+                    return ResponseEntity.status(500).<ParallelInferenceResult>body(null);
+                }
+            }).whenComplete((result, throwable) -> {
+                if (throwable != null) {
+                    logger.error("异步处理异常", throwable);
+                    deferredResult.setErrorResult(throwable);
+                } else {
+                    deferredResult.setResult(result);
+                }
+            });
+            
+            return deferredResult;
+        }
     }
 
     /**
@@ -439,6 +727,10 @@ public class ParallelInferenceController {
                 // 构建会话上下文
                 String sessionContext = buildSessionContext(session, request.getAdditionalContext());
                 
+                // 使用原子计数器跟踪完成的代理数量
+                java.util.concurrent.atomic.AtomicInteger completedAgents = new java.util.concurrent.atomic.AtomicInteger(0);
+                java.util.concurrent.atomic.AtomicBoolean emitterCompleted = new java.util.concurrent.atomic.AtomicBoolean(false);
+                
                 // 为每个代理创建流式推理请求
                 for (Agent agent : agents) {
                     // 构建系统提示词
@@ -462,6 +754,11 @@ public class ParallelInferenceController {
                         new QiniuAIService.StreamingResponseHandler() {
                             @Override
                             public void onData(String data) {
+                                // 检查emitter是否已经完成
+                                if (emitterCompleted.get()) {
+                                    return;
+                                }
+                                
                                 try {
                                     // 发送数据片段，包含代理ID和名称
                                     String response = String.format("{\"agentId\":%d,\"agentName\":\"%s\",\"data\":%s}",
@@ -469,33 +766,47 @@ public class ParallelInferenceController {
                                     emitter.send(response);
                                 } catch (Exception e) {
                                     logger.error("发送流式数据失败", e);
-                                    emitter.completeWithError(e);
+                                    if (!emitterCompleted.getAndSet(true)) {
+                                        emitter.completeWithError(e);
+                                    }
                                 }
                             }
                             
                             @Override
                             public void onComplete() {
-                                // 每个代理完成时不需要特殊处理
+                                // 检查是否所有代理都已完成
+                                int completed = completedAgents.incrementAndGet();
+                                if (completed == agents.size() && !emitterCompleted.getAndSet(true)) {
+                                    try {
+                                        emitter.send("[DONE]");
+                                        emitter.complete();
+                                    } catch (Exception e) {
+                                        logger.error("完成流式输出失败", e);
+                                    }
+                                }
                             }
                             
                             @Override
                             public void onError(Throwable throwable) {
                                 logger.error("代理{}流式推理处理异常", agent.getId(), throwable);
-                                // 不立即完成emitter，让其他代理继续处理
+                                // 检查是否所有代理都已完成或出错
+                                int completed = completedAgents.incrementAndGet();
+                                if (completed == agents.size() && !emitterCompleted.getAndSet(true)) {
+                                    emitter.complete();
+                                }
                             }
                         }
                     );
                 }
                 
-                // 等待一段时间确保所有数据发送完成
-                Thread.sleep(1000);
-                
-                // 完成流式输出
-                emitter.complete();
-                
             } catch (Exception e) {
                 logger.error("会话阶段流式推理失败: sessionId={}, phaseType={}", sessionId, phaseType, e);
-                emitter.completeWithError(e);
+                // 确保emitter被完成
+                try {
+                    emitter.completeWithError(e);
+                } catch (Exception ex) {
+                    logger.error("完成emitter时发生异常", ex);
+                }
             }
         });
         
@@ -529,6 +840,10 @@ public class ParallelInferenceController {
                 // 验证代理所有权
                 validateAgentsOwnership(agents, authentication);
                 
+                // 使用原子计数器跟踪完成的代理数量
+                java.util.concurrent.atomic.AtomicInteger completedAgents = new java.util.concurrent.atomic.AtomicInteger(0);
+                java.util.concurrent.atomic.AtomicBoolean emitterCompleted = new java.util.concurrent.atomic.AtomicBoolean(false);
+                
                 // 为每个代理创建流式推理请求
                 for (Agent agent : agents) {
                     // 发送流式推理请求
@@ -538,6 +853,11 @@ public class ParallelInferenceController {
                         new QiniuAIService.StreamingResponseHandler() {
                             @Override
                             public void onData(String data) {
+                                // 检查emitter是否已经完成
+                                if (emitterCompleted.get()) {
+                                    return;
+                                }
+                                
                                 try {
                                     // 发送数据片段，包含代理ID和名称
                                     String response = String.format("{\"agentId\":%d,\"agentName\":\"%s\",\"data\":%s}",
@@ -545,33 +865,47 @@ public class ParallelInferenceController {
                                     emitter.send(response);
                                 } catch (Exception e) {
                                     logger.error("发送流式数据失败", e);
-                                    emitter.completeWithError(e);
+                                    if (!emitterCompleted.getAndSet(true)) {
+                                        emitter.completeWithError(e);
+                                    }
                                 }
                             }
                             
                             @Override
                             public void onComplete() {
-                                // 每个代理完成时不需要特殊处理
+                                // 检查是否所有代理都已完成
+                                int completed = completedAgents.incrementAndGet();
+                                if (completed == agents.size() && !emitterCompleted.getAndSet(true)) {
+                                    try {
+                                        emitter.send("[DONE]");
+                                        emitter.complete();
+                                    } catch (Exception e) {
+                                        logger.error("完成流式输出失败", e);
+                                    }
+                                }
                             }
                             
                             @Override
                             public void onError(Throwable throwable) {
                                 logger.error("代理{}流式推理处理异常", agent.getId(), throwable);
-                                // 不立即完成emitter，让其他代理继续处理
+                                // 检查是否所有代理都已完成或出错
+                                int completed = completedAgents.incrementAndGet();
+                                if (completed == agents.size() && !emitterCompleted.getAndSet(true)) {
+                                    emitter.complete();
+                                }
                             }
                         }
                     );
                 }
                 
-                // 等待一段时间确保所有数据发送完成
-                Thread.sleep(1000);
-                
-                // 完成流式输出
-                emitter.complete();
-                
             } catch (Exception e) {
                 logger.error("自定义流式并行推理失败: sessionId={}", request.getSessionId(), e);
-                emitter.completeWithError(e);
+                // 确保emitter被完成
+                try {
+                    emitter.completeWithError(e);
+                } catch (Exception ex) {
+                    logger.error("完成emitter时发生异常", ex);
+                }
             }
         });
         

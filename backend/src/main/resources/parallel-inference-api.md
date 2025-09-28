@@ -64,7 +64,7 @@
 
 **接口地址**: `POST /api/parallel-inference/sessions/{sessionId}/phases/{phaseType}/execute`
 
-**接口描述**: 触发指定会话和阶段的多代理并行推理
+**接口描述**: 触发指定会话和阶段的多代理并行推理，支持流式输出
 
 **路径参数**:
 | 参数名 | 类型 | 必填 | 说明 |
@@ -72,18 +72,23 @@
 | sessionId | Long | 是 | 会话 ID |
 | phaseType | PhaseType | 是 | 阶段类型 (IDEA_GENERATION/FEASIBILITY_ANALYSIS/CRITICISM_DISCUSSION) |
 
+**请求参数**:
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| stream | Boolean | 否 | 是否启用流式输出，默认为false |
+
 **请求体**:
 
 ```json
 {
   "userPrompt": "请为智能家居产品进行头脑风暴",
-  "additionalContext": "目标用户：年轻家庭，预算：1000-5000元",
-  "waitForCompletion": true,
-  "timeoutSeconds": 120
+  "additionalContext": "目标用户：年轻家庭，预算：1000-5000元"
 }
 ```
 
 **响应示例**:
+
+非流式响应 (200):
 
 ```json
 {
@@ -108,11 +113,37 @@
 }
 ```
 
+流式响应 (200):
+
+当stream=true时，响应使用 Server-Sent Events (SSE) 格式，每个数据块包含以下字段：
+| 字段名 | 类型 | 说明 |
+|--------|------|------|
+| agentId | Long | 代理 ID |
+| agentName | String | 代理名称 |
+| data | String | 流式数据块，格式同单代理流式响应 |
+
+流式响应示例：
+
+```
+data: {"agentId":1,"agentName":"产品设计师","data":"{\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"created\":1704060000,\"model\":\"deepseek/deepseek-v3.1-terminus\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"基于智能家居\"},\"finish_reason\":null}]}"}
+
+data: {"agentId":2,"agentName":"市场分析师","data":"{\"id\":\"chatcmpl-124\",\"object\":\"chat.completion.chunk\",\"created\":1704060001,\"model\":\"deepseek/deepseek-v3.1-terminus\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"从市场角度\"},\"finish_reason\":null}]}"}
+
+data: {"agentId":1,"agentName":"产品设计师","data":"{\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"created\":1704060000,\"model\":\"deepseek/deepseek-v3.1-terminus\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"的需求\"},\"finish_reason\":null}]}"}
+
+data: [DONE]
+```
+
 #### 1.2 自定义代理并行推理
 
 **接口地址**: `POST /api/parallel-inference/custom`
 
-**接口描述**: 使用指定的代理列表进行并行推理
+**接口描述**: 使用指定的代理列表进行并行推理，支持流式输出
+
+**请求参数**:
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| stream | Boolean | 否 | 是否启用流式输出，默认为false |
 
 **请求体**:
 
@@ -122,9 +153,56 @@
   "userPrompt": "请为智能家居产品进行头脑风暴",
   "sessionContext": "产品类型：智能家居，目标用户：年轻家庭",
   "sessionId": "custom-session-001",
-  "phaseType": "IDEA_GENERATION",
-  "timeoutSeconds": 120
+  "phaseType": "IDEA_GENERATION"
 }
+```
+
+**响应示例**:
+
+非流式响应 (200):
+
+```json
+{
+  "agentResponses": [
+    {
+      "agentId": 1,
+      "agentName": "产品设计师",
+      "roleType": "DESIGNER",
+      "content": "基于智能家居的需求，我建议设计一个多模态交互系统...",
+      "status": "SUCCESS",
+      "processingTimeMs": 5000
+    }
+  ],
+  "startTime": "2024-01-15T14:30:00",
+  "endTime": "2024-01-15T14:30:10",
+  "totalProcessingTimeMs": 10000,
+  "totalAgents": 5,
+  "successfulAgents": 4,
+  "failedAgents": 1,
+  "phaseSummary": "本阶段各代理从不同专业角度提出了创新想法...",
+  "successRate": 0.8
+}
+```
+
+流式响应 (200):
+
+当stream=true时，响应使用 Server-Sent Events (SSE) 格式，每个数据块包含以下字段：
+| 字段名 | 类型 | 说明 |
+|--------|------|------|
+| agentId | Long | 代理 ID |
+| agentName | String | 代理名称 |
+| data | String | 流式数据块，格式同单代理流式响应 |
+
+流式响应示例：
+
+```
+data: {"agentId":1,"agentName":"产品设计师","data":"{\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"created\":1704060000,\"model\":\"deepseek/deepseek-v3.1-terminus\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"基于智能家居\"},\"finish_reason\":null}]}"}
+
+data: {"agentId":2,"agentName":"市场分析师","data":"{\"id\":\"chatcmpl-124\",\"object\":\"chat.completion.chunk\",\"created\":1704060001,\"model\":\"deepseek/deepseek-v3.1-terminus\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"从市场角度\"},\"finish_reason\":null}]}"}
+
+data: {"agentId":1,"agentName":"产品设计师","data":"{\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"created\":1704060000,\"model\":\"deepseek/deepseek-v3.1-terminus\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"的需求\"},\"finish_reason\":null}]}"}
+
+data: [DONE]
 ```
 
 #### 1.3 获取推理结果详情
