@@ -299,7 +299,9 @@ public class PhaseService {
         if (!phaseType.isFirst()) {
             PhaseType previousPhaseType = phaseType.getPrevious();
             Phase previousPhase = phaseMapper.findBySessionIdAndPhaseType(sessionId, previousPhaseType);
-            if (previousPhase == null || previousPhase.getStatus() != PhaseStatus.APPROVED) {
+            if (previousPhase == null || 
+                (previousPhase.getStatus() != PhaseStatus.APPROVED && 
+                 previousPhase.getStatus() != PhaseStatus.COMPLETED)) {
                 throw new IllegalStateException("前置阶段未完成，无法开始当前阶段");
             }
         }
@@ -409,6 +411,30 @@ public class PhaseService {
         // 检查阶段是否可以审核
         if (!phase.canReview()) {
             throw new IllegalStateException("阶段当前状态不允许审核: " + phase.getStatus());
+        }
+        
+        // 查询该阶段下所有状态为SUCCESS的agent响应记录
+        List<AgentResponse> successfulResponses = agentResponseMapper.findSuccessfulResponsesByPhaseId(phase.getId());
+        
+        // 将所有agent成功生成的content内容收集并存储在phases表的summary字段当中
+        if (!successfulResponses.isEmpty()) {
+            StringBuilder summary = new StringBuilder();
+            summary.append("=== ").append(phaseType.getDisplayName()).append("阶段所有代理响应 ===\n\n");
+            
+            // 按顺序添加每个成功代理的响应内容
+            for (AgentResponse response : successfulResponses) {
+                // 获取代理信息
+                Agent agent = agentService.getAgentById(response.getAgentId());
+                if (agent != null) {
+                    summary.append("【").append(agent.getRoleType()).append(" - ")
+                           .append(agent.getName()).append("】\n");
+                }
+                summary.append(response.getContent()).append("\n\n");
+            }
+            
+            // 更新阶段的summary字段
+            phase.setSummary(summary.toString());
+            phaseMapper.updateById(phase);
         }
         
         // 审核通过
@@ -730,19 +756,19 @@ public class PhaseService {
      */
     private String generateDefaultSummary(ParallelInferenceResult result, PhaseType phaseType) {
         StringBuilder summary = new StringBuilder();
-        summary.append(phaseType.getDisplayName()).append("阶段完成。\n");
-        summary.append("参与代理数量: ").append(result.getTotalAgents()).append("\n");
-        summary.append("成功响应数量: ").append(result.getSuccessfulAgents()).append("\n");
-        summary.append("成功率: ").append(String.format("%.1f%%", result.getSuccessRate() * 100)).append("\n");
         
+        // 添加标题
+        summary.append("=== ").append(phaseType.getDisplayName()).append("阶段所有代理响应 ===\n\n");
+        
+        // 按顺序添加每个成功代理的响应内容
         if (result.hasSuccessfulResponses()) {
-            if (phaseType == PhaseType.IDEA_GENERATION) {
-                summary.append("\n各代理从不同角度提出了创新的想法和建议，为后续阶段提供了良好的基础。");
-            } else if (phaseType == PhaseType.FEASIBILITY_ANALYSIS) {
-                summary.append("\n各代理从技术角度评估了前面阶段的创意想法，分析了实现的可行性和技术难点。");
-            } else if (phaseType == PhaseType.DRAWBACK_DISCUSSION) {
-                summary.append("\n各代理深入讨论了前面阶段想法的潜在缺点和改进建议，提出了优化方案。");
+            for (AgentInferenceResponse response : result.getSuccessfulResponses()) {
+                summary.append("【").append(response.getRoleType()).append(" - ")
+                       .append(response.getAgentName()).append("】\n");
+                summary.append(response.getContent()).append("\n\n");
             }
+        } else {
+            summary.append("本阶段没有成功的代理响应。");
         }
         
         return summary.toString();
