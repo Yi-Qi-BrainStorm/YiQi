@@ -74,6 +74,32 @@
           </div>
         </a-card>
 
+        <!-- 后端连接测试 -->
+        <a-card size="small" title="后端连接测试">
+          <a-space>
+            <a-button @click="testBackendConnection" :loading="backendTesting">
+              测试后端连接
+            </a-button>
+            <a-button @click="runAllBackendTests" :loading="backendTesting">
+              运行所有测试
+            </a-button>
+            <a-button @click="toggleMockMode">
+              {{ mockEnabled ? '禁用Mock' : '启用Mock' }}
+            </a-button>
+          </a-space>
+          <div v-if="backendTestResult" class="result-box">
+            <div v-for="result in backendTestResult" :key="result.service" class="test-result">
+              <a-tag :color="result.status === 'success' ? 'green' : 'red'">
+                {{ result.service }}
+              </a-tag>
+              <span>{{ result.message }}</span>
+              <span v-if="result.responseTime" class="response-time">
+                ({{ result.responseTime }}ms)
+              </span>
+            </div>
+          </div>
+        </a-card>
+
         <!-- 系统信息 -->
         <a-card size="small" title="系统信息">
           <a-descriptions :column="2" size="small">
@@ -105,7 +131,8 @@ import { message, Modal } from 'ant-design-vue';
 import { useAuthStore } from '@/stores/auth';
 import { useAgentStore } from '@/stores/agents';
 import { useBrainstormStore } from '@/stores/brainstorm';
-import { isMockEnabled } from '@/utils/mockEnabler';
+import { isMockEnabled, enableMock, disableMock } from '@/utils/mockEnabler';
+import { backendConnectionService, type ConnectionTestResult } from '@/services/backendConnectionService';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -116,6 +143,8 @@ const brainstormStore = useBrainstormStore();
 const componentTestResult = ref('');
 const storeTestResult = ref(null);
 const mockTestResult = ref(null);
+const backendTestResult = ref<ConnectionTestResult[] | null>(null);
+const backendTesting = ref(false);
 const vueVersion = ref('3.x');
 const mode = ref(import.meta.env.MODE);
 const mockEnabled = ref(false);
@@ -308,6 +337,63 @@ const clearAuthData = () => {
   });
 };
 
+// 后端连接测试方法
+const testBackendConnection = async () => {
+  backendTesting.value = true;
+  try {
+    const result = await backendConnectionService.testBasicConnection();
+    backendTestResult.value = [result];
+    
+    if (result.status === 'success') {
+      message.success('后端连接测试成功');
+    } else {
+      message.error('后端连接测试失败');
+    }
+  } catch (error) {
+    message.error('后端连接测试异常');
+  } finally {
+    backendTesting.value = false;
+  }
+};
+
+const runAllBackendTests = async () => {
+  backendTesting.value = true;
+  try {
+    const results = await backendConnectionService.runAllTests();
+    backendTestResult.value = results;
+    
+    const successCount = results.filter(r => r.status === 'success').length;
+    const totalCount = results.length;
+    
+    if (successCount === totalCount) {
+      message.success(`所有测试通过 (${successCount}/${totalCount})`);
+    } else {
+      message.warning(`部分测试失败 (${successCount}/${totalCount})`);
+    }
+  } catch (error) {
+    message.error('后端测试异常');
+  } finally {
+    backendTesting.value = false;
+  }
+};
+
+const toggleMockMode = () => {
+  if (mockEnabled.value) {
+    disableMock();
+    mockEnabled.value = false;
+    message.info('Mock模式已禁用，将使用真实后端API');
+  } else {
+    enableMock();
+    mockEnabled.value = true;
+    message.info('Mock模式已启用，将使用模拟数据');
+  }
+  
+  // 刷新页面以应用新设置
+  setTimeout(() => {
+    window.location.reload();
+  }, 1000);
+};
+
 // 组件挂载时初始化
 onMounted(() => {
   mockEnabled.value = isMockEnabled();
@@ -350,5 +436,18 @@ onMounted(() => {
   background-color: #e6f7ff;
   border-radius: 4px;
   font-family: monospace;
+}
+
+.test-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  
+  .response-time {
+    color: #999;
+    font-size: 12px;
+    margin-left: auto;
+  }
 }
 </style>

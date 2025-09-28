@@ -106,9 +106,51 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
     error.value = null;
     
     try {
-      const response = await brainstormService.getSessions(params);
-      sessions.value = response.items;
-      pagination.value = response.pagination;
+      const response = await brainstormService.getBrainstormSessions();
+      
+      // 后端直接返回数组，前端进行过滤和分页
+      let filteredSessions = response;
+      
+      // 应用状态过滤
+      if (params?.status) {
+        filteredSessions = filteredSessions.filter(session => 
+          session.status === params.status
+        );
+      }
+      
+      // 应用阶段过滤
+      if (params?.currentPhase) {
+        filteredSessions = filteredSessions.filter(session => 
+          session.currentPhase === params.currentPhase
+        );
+      }
+      
+      // 应用搜索过滤
+      if (params?.search) {
+        const searchTerm = params.search.toLowerCase();
+        filteredSessions = filteredSessions.filter(session => 
+          session.title.toLowerCase().includes(searchTerm) ||
+          (session.description && session.description.toLowerCase().includes(searchTerm)) ||
+          (session.topic && session.topic.toLowerCase().includes(searchTerm))
+        );
+      }
+      
+      // 计算分页
+      const page = params?.page || 1;
+      const limit = params?.limit || 20;
+      const startIndex = (page - 1) * limit;
+      const endIndex = startIndex + limit;
+      const paginatedSessions = filteredSessions.slice(startIndex, endIndex);
+      
+      sessions.value = paginatedSessions;
+      pagination.value = {
+        page,
+        limit,
+        total: filteredSessions.length,
+        totalPages: Math.ceil(filteredSessions.length / limit),
+        hasNext: endIndex < filteredSessions.length,
+        hasPrev: page > 1
+      };
     } catch (err: any) {
       error.value = err.message || '获取会话列表失败';
       throw err;
@@ -120,24 +162,25 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
   /**
    * 创建新会话
    */
-  const createSession = async (title: string, topic: string, agentIds: number[], description?: string): Promise<BrainstormSession> => {
+  const createSession = async (title: string, agentIds: number[], description?: string): Promise<BrainstormSession> => {
     loading.value = true;
     error.value = null;
     
     try {
-      const session = await brainstormService.createSession({
+      const session = await brainstormService.createBrainstormSession({
         title,
         description,
-        topic,
         agentIds,
       });
       
       currentSession.value = session;
       
       // 初始化代理状态
-      session.agents.forEach(sessionAgent => {
-        agentStatuses.value[sessionAgent.agentId] = 'idle';
-      });
+      if (session.agents && Array.isArray(session.agents)) {
+        session.agents.forEach(sessionAgent => {
+          agentStatuses.value[sessionAgent.agentId] = 'idle';
+        });
+      }
       
       // 清空之前的结果
       realTimeResults.value = {};
@@ -159,7 +202,7 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
     error.value = null;
     
     try {
-      const session = await brainstormService.getSession(sessionId);
+      const session = await brainstormService.getBrainstormSession(sessionId);
       currentSession.value = session;
       
       // 初始化代理状态
@@ -200,21 +243,24 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
   /**
    * 开始会话
    */
-  const startSession = async (sessionId: number): Promise<void> => {
+  const startSession = async (sessionId: number, topic: string): Promise<void> => {
     if (!currentSession.value || currentSession.value.id !== sessionId) {
       await loadSession(sessionId);
     }
     
     try {
-      await brainstormService.startSession(sessionId);
+      await brainstormService.startSession(sessionId, topic);
       
       if (currentSession.value) {
         currentSession.value.status = 'IN_PROGRESS';
+        currentSession.value.topic = topic;
         
         // 设置所有代理为思考状态
-        currentSession.value.agents.forEach(sessionAgent => {
-          agentStatuses.value[sessionAgent.agentId] = 'thinking';
-        });
+        if (currentSession.value.agents && Array.isArray(currentSession.value.agents)) {
+          currentSession.value.agents.forEach(sessionAgent => {
+            agentStatuses.value[sessionAgent.agentId] = 'thinking';
+          });
+        }
       }
     } catch (err: any) {
       error.value = err.message || '开始会话失败';

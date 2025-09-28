@@ -230,6 +230,18 @@ const routes: RouteRecordRaw[] = [
         requiresAuth: false,
         title: 'Mock数据测试'
       },
+    },
+    {
+      path: '/dev/backend-integration',
+      name: 'BackendIntegrationTest',
+      component: () => import(
+        /* webpackChunkName: "dev-pages" */
+        '@/views/dev/BackendIntegrationTest.vue'
+      ),
+      meta: { 
+        requiresAuth: false,
+        title: '前后端集成测试'
+      },
     }
   ] : []),
   

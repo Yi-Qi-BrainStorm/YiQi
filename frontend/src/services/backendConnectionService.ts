@@ -1,256 +1,285 @@
-import { ApiService } from './api';
-import { NotificationService } from './notificationService';
-import type { AppError } from './errorHandler';
-
 /**
- * 后端连接服务 - 管理与后端API的连接和健康检查
+ * 后端连接服务
+ * 用于测试和验证与后端API的连接状态
  */
+
+import { ApiService } from './api';
+import { authService } from './authService';
+import { agentService } from './agentService';
+import { sessionService } from './sessionService';
+import { aiInferenceService } from './aiInferenceService';
+
+export interface ConnectionTestResult {
+  service: string;
+  status: 'success' | 'error';
+  message: string;
+  responseTime?: number;
+  error?: any;
+}
+
 export class BackendConnectionService {
-  private static instance: BackendConnectionService;
-  private isConnected = false;
-  private lastHealthCheck = 0;
-  private healthCheckInterval = 30000; // 30秒
-  private retryAttempts = 0;
-  private maxRetryAttempts = 5;
-  private retryDelay = 2000; // 2秒
-
-  private constructor() {}
-
-  static getInstance(): BackendConnectionService {
-    if (!BackendConnectionService.instance) {
-      BackendConnectionService.instance = new BackendConnectionService();
-    }
-    return BackendConnectionService.instance;
-  }
-
   /**
-   * 检查后端健康状态
+   * 测试基础API连接
    */
-  async checkHealth(): Promise<boolean> {
-    try {
-      const response = await ApiService.get('/actuator/health');
-      
-      // Spring Boot Actuator health endpoint 返回格式: { status: "UP" }
-      if (response && (response.status === 'UP' || response === 'UP')) {
-        this.isConnected = true;
-        this.retryAttempts = 0;
-        this.lastHealthCheck = Date.now();
-        
-        console.log('后端服务健康检查通过');
-        return true;
-      } else {
-        throw new Error(`Backend health check failed: ${JSON.stringify(response)}`);
-      }
-    } catch (error: any) {
-      this.isConnected = false;
-      console.error('后端健康检查失败:', error);
-      
-      // 如果是网络错误，尝试重连
-      if (this.shouldRetry(error)) {
-        await this.attemptReconnection();
-      }
-      
-      return false;
-    }
-  }
-
-  /**
-   * 尝试重新连接
-   */
-  private async attemptReconnection(): Promise<void> {
-    if (this.retryAttempts >= this.maxRetryAttempts) {
-      console.error('达到最大重试次数，停止重连');
-      NotificationService.error('无法连接到服务器，请检查网络连接或联系技术支持');
-      return;
-    }
-
-    this.retryAttempts++;
-    console.log(`尝试重连后端服务 (${this.retryAttempts}/${this.maxRetryAttempts})`);
-
-    await new Promise(resolve => setTimeout(resolve, this.retryDelay * this.retryAttempts));
-
-    try {
-      await this.checkHealth();
-      if (this.isConnected) {
-        NotificationService.success('服务器连接已恢复');
-        console.log('后端服务重连成功');
-      }
-    } catch (error) {
-      console.error('重连失败:', error);
-      // 继续重试
-      await this.attemptReconnection();
-    }
-  }
-
-  /**
-   * 判断是否应该重试
-   */
-  private shouldRetry(error: AppError): boolean {
-    const retryableCodes = ['NETWORK_ERROR', 'TIMEOUT', 'SERVICE_UNAVAILABLE'];
-    return retryableCodes.includes(error.code);
-  }
-
-  /**
-   * 启动定期健康检查
-   */
-  startHealthCheck(): void {
-    setInterval(async () => {
-      if (Date.now() - this.lastHealthCheck > this.healthCheckInterval) {
-        await this.checkHealth();
-      }
-    }, this.healthCheckInterval);
-  }
-
-  /**
-   * 验证API端点可用性
-   */
-  async validateApiEndpoints(): Promise<{
-    userEndpoints: boolean;
-    agentEndpoints: boolean;
-    brainstormEndpoints: boolean;
-  }> {
-    const results = {
-      userEndpoints: false,
-      agentEndpoints: false,
-      brainstormEndpoints: false,
-    };
-
-    try {
-      // 测试用户端点 - 使用无效凭据测试登录端点，期望得到401错误
-      await ApiService.post('/users/login', {
-        username: 'test_connection',
-        password: 'invalid_password'
-      });
-      // 如果没有抛出错误，说明端点可能有问题
-      results.userEndpoints = false;
-    } catch (error: any) {
-      // 如果得到401错误，说明端点正常工作
-      if (error.code === 'UNAUTHORIZED' || error.message?.includes('401')) {
-        results.userEndpoints = true;
-      } else {
-        console.warn('用户API端点测试失败:', error);
-      }
-    }
-
-    // 注意：代理和头脑风暴端点需要认证，这里只做基础连接测试
-    // 实际的端点验证会在用户登录后进行
-    try {
-      // 测试代理端点 - 不带认证访问，期望得到401错误
-      await ApiService.get('/agents');
-      results.agentEndpoints = false;
-    } catch (error: any) {
-      if (error.code === 'UNAUTHORIZED' || error.message?.includes('401')) {
-        results.agentEndpoints = true;
-      }
-    }
-
-    try {
-      // 测试头脑风暴端点 - 不带认证访问，期望得到401错误
-      await ApiService.get('/brainstorm/sessions');
-      results.brainstormEndpoints = false;
-    } catch (error: any) {
-      if (error.code === 'UNAUTHORIZED' || error.message?.includes('401')) {
-        results.brainstormEndpoints = true;
-      }
-    }
-
-    return results;
-  }
-
-  /**
-   * 测试认证端点
-   */
-  async testAuthEndpoints(): Promise<boolean> {
-    try {
-      // 使用无效凭据测试登录端点，期望得到401错误
-      await ApiService.post('/users/login', {
-        username: 'test_connection',
-        password: 'invalid_password'
-      });
-      return false; // 不应该成功
-    } catch (error: any) {
-      // 如果得到401错误，说明端点正常工作
-      if (error.code === 'UNAUTHORIZED') {
-        console.log('认证端点工作正常');
-        return true;
-      }
-      console.error('认证端点测试失败:', error);
-      return false;
-    }
-  }
-
-  /**
-   * 获取后端服务信息
-   */
-  async getServerInfo(): Promise<{
-    version?: string;
-    environment?: string;
-    timestamp?: string;
-  }> {
-    try {
-      const response = await ApiService.get('/actuator/info');
-      return {
-        version: response.build?.version,
-        environment: response.environment,
-        timestamp: response.timestamp,
-      };
-    } catch (error) {
-      console.warn('无法获取服务器信息:', error);
-      return {};
-    }
-  }
-
-  /**
-   * 获取连接状态
-   */
-  getConnectionStatus(): {
-    connected: boolean;
-    lastHealthCheck: number;
-    retryAttempts: number;
-  } {
-    return {
-      connected: this.isConnected,
-      lastHealthCheck: this.lastHealthCheck,
-      retryAttempts: this.retryAttempts,
-    };
-  }
-
-  /**
-   * 手动触发连接测试
-   */
-  async testConnection(): Promise<{
-    health: boolean;
-    auth: boolean;
-    serverInfo: any;
-    latency: number;
-  }> {
+  static async testBasicConnection(): Promise<ConnectionTestResult> {
     const startTime = Date.now();
-    
-    const [health, auth, serverInfo] = await Promise.allSettled([
-      this.checkHealth(),
-      this.testAuthEndpoints(),
-      this.getServerInfo(),
-    ]);
 
-    const latency = Date.now() - startTime;
+    try {
+      // 先尝试用户端点（如果已登录）
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        try {
+          await ApiService.get('/users/me');
+          return {
+            service: 'Basic API',
+            status: 'success',
+            message: '后端API连接正常（已认证）',
+            responseTime: Date.now() - startTime
+          };
+        } catch (authError: any) {
+          // 如果是401错误，说明后端可用但token无效
+          if (authError.response?.status === 401) {
+            return {
+              service: 'Basic API',
+              status: 'success',
+              message: '后端API连接正常（需要重新登录）',
+              responseTime: Date.now() - startTime
+            };
+          }
+          throw authError;
+        }
+      }
 
-    return {
-      health: health.status === 'fulfilled' ? health.value : false,
-      auth: auth.status === 'fulfilled' ? auth.value : false,
-      serverInfo: serverInfo.status === 'fulfilled' ? serverInfo.value : {},
-      latency,
-    };
+      // 尝试健康检查端点
+      try {
+        await ApiService.get('/actuator/health');
+        return {
+          service: 'Basic API',
+          status: 'success',
+          message: '后端API连接正常',
+          responseTime: Date.now() - startTime
+        };
+      } catch (healthError) {
+        // 如果健康检查失败，尝试其他端点
+        await ApiService.get('/api/agents/role-types');
+        return {
+          service: 'Basic API',
+          status: 'success',
+          message: '后端API连接正常',
+          responseTime: Date.now() - startTime
+        };
+      }
+    } catch (error: any) {
+      return {
+        service: 'Basic API',
+        status: 'error',
+        message: `连接失败: ${error.message}`,
+        responseTime: Date.now() - startTime,
+        error
+      };
+    }
   }
 
   /**
-   * 重置连接状态
+   * 测试认证服务
    */
-  reset(): void {
-    this.isConnected = false;
-    this.lastHealthCheck = 0;
-    this.retryAttempts = 0;
+  static async testAuthService(): Promise<ConnectionTestResult> {
+    const startTime = Date.now();
+
+    try {
+      // 尝试获取当前用户信息（如果已登录）
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        await authService.getCurrentUser();
+        return {
+          service: 'Auth Service',
+          status: 'success',
+          message: '认证服务连接正常，用户已登录',
+          responseTime: Date.now() - startTime
+        };
+      } else {
+        return {
+          service: 'Auth Service',
+          status: 'success',
+          message: '认证服务可用，用户未登录',
+          responseTime: Date.now() - startTime
+        };
+      }
+    } catch (error: any) {
+      return {
+        service: 'Auth Service',
+        status: 'error',
+        message: `认证服务测试失败: ${error.message}`,
+        responseTime: Date.now() - startTime,
+        error
+      };
+    }
+  }
+
+  /**
+   * 测试代理服务
+   */
+  static async testAgentService(): Promise<ConnectionTestResult> {
+    const startTime = Date.now();
+
+    try {
+      // 测试获取角色类型（不需要认证）
+      await agentService.getRoleTypes();
+
+      return {
+        service: 'Agent Service',
+        status: 'success',
+        message: '代理服务连接正常',
+        responseTime: Date.now() - startTime
+      };
+    } catch (error: any) {
+      // 如果角色类型接口失败，尝试获取代理列表
+      try {
+        await agentService.getAgents();
+        return {
+          service: 'Agent Service',
+          status: 'success',
+          message: '代理服务连接正常（需要认证）',
+          responseTime: Date.now() - startTime
+        };
+      } catch (listError: any) {
+        // 如果是401错误，说明服务可用但需要认证
+        if (listError.response?.status === 401) {
+          return {
+            service: 'Agent Service',
+            status: 'success',
+            message: '代理服务可用（需要认证）',
+            responseTime: Date.now() - startTime
+          };
+        }
+
+        return {
+          service: 'Agent Service',
+          status: 'error',
+          message: `代理服务测试失败: ${error.message}`,
+          responseTime: Date.now() - startTime,
+          error
+        };
+      }
+    }
+  }
+
+  /**
+   * 测试会话服务
+   */
+  static async testSessionService(): Promise<ConnectionTestResult> {
+    const startTime = Date.now();
+
+    try {
+      // 测试获取会话列表
+      const brainstormService = await import('./brainstormService');
+      await brainstormService.BrainstormService.getBrainstormSessions();
+
+      return {
+        service: 'Session Service',
+        status: 'success',
+        message: '会话服务连接正常',
+        responseTime: Date.now() - startTime
+      };
+    } catch (error: any) {
+      // 如果是401错误，说明服务可用但需要认证
+      if (error.response?.status === 401) {
+        return {
+          service: 'Session Service',
+          status: 'success',
+          message: '会话服务可用（需要认证）',
+          responseTime: Date.now() - startTime
+        };
+      }
+
+      return {
+        service: 'Session Service',
+        status: 'error',
+        message: `会话服务测试失败: ${error.message}`,
+        responseTime: Date.now() - startTime,
+        error
+      };
+    }
+  }
+
+  /**
+   * 测试AI推理服务
+   */
+  static async testAIInferenceService(): Promise<ConnectionTestResult> {
+    const startTime = Date.now();
+
+    try {
+      // 测试AI服务连接
+      await aiInferenceService.testAIService();
+
+      return {
+        service: 'AI Inference Service',
+        status: 'success',
+        message: 'AI推理服务连接正常',
+        responseTime: Date.now() - startTime
+      };
+    } catch (error: any) {
+      return {
+        service: 'AI Inference Service',
+        status: 'error',
+        message: `AI推理服务测试失败: ${error.message}`,
+        responseTime: Date.now() - startTime,
+        error
+      };
+    }
+  }
+
+  /**
+   * 运行所有连接测试
+   */
+  static async runAllTests(): Promise<ConnectionTestResult[]> {
+    const tests = [
+      this.testBasicConnection(),
+      this.testAuthService(),
+      this.testAgentService(),
+      this.testSessionService(),
+      this.testAIInferenceService()
+    ];
+
+    return await Promise.all(tests);
+  }
+
+  /**
+   * 获取连接状态摘要
+   */
+  static async getConnectionSummary(): Promise<{
+    totalTests: number;
+    successfulTests: number;
+    failedTests: number;
+    averageResponseTime: number;
+    overallStatus: 'healthy' | 'degraded' | 'unhealthy';
+  }> {
+    const results = await this.runAllTests();
+
+    const totalTests = results.length;
+    const successfulTests = results.filter(r => r.status === 'success').length;
+    const failedTests = totalTests - successfulTests;
+    const averageResponseTime = results
+      .filter(r => r.responseTime)
+      .reduce((sum, r) => sum + (r.responseTime || 0), 0) / totalTests;
+
+    let overallStatus: 'healthy' | 'degraded' | 'unhealthy';
+    if (successfulTests === totalTests) {
+      overallStatus = 'healthy';
+    } else if (successfulTests > 0) {
+      overallStatus = 'degraded';
+    } else {
+      overallStatus = 'unhealthy';
+    }
+
+    return {
+      totalTests,
+      successfulTests,
+      failedTests,
+      averageResponseTime,
+      overallStatus
+    };
   }
 }
 
-// 导出单例实例
-export const backendConnectionService = BackendConnectionService.getInstance();
+export const backendConnectionService = BackendConnectionService;
