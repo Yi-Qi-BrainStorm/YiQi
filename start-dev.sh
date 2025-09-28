@@ -16,7 +16,7 @@ echo "📋 检查依赖..."
 check_command "java"
 check_command "mvn"
 check_command "node"
-check_command "npm"
+check_command "pnpm"
 
 # 检查Java版本
 JAVA_VERSION=$(java -version 2>&1 | head -n 1 | cut -d'"' -f2 | cut -d'.' -f1-2)
@@ -34,12 +34,22 @@ cd backend
 # 检查是否需要安装依赖
 if [ ! -d "target" ]; then
     echo "📦 安装后端依赖..."
-    mvn clean install -DskipTests
+    # 使用自定义Maven配置
+    if [ -f "settings.xml" ]; then
+        mvn -s settings.xml clean install -DskipTests
+    else
+        mvn clean install -DskipTests
+    fi
 fi
 
 # 启动后端服务（后台运行）
 echo "🚀 启动Spring Boot应用..."
-mvn spring-boot:run > ../backend.log 2>&1 &
+# 使用自定义Maven配置
+if [ -f "settings.xml" ]; then
+    mvn -s settings.xml spring-boot:run > ../backend.log 2>&1 &
+else
+    mvn spring-boot:run > ../backend.log 2>&1 &
+fi
 BACKEND_PID=$!
 
 # 等待后端启动
@@ -62,12 +72,12 @@ cd ../frontend
 # 检查是否需要安装依赖
 if [ ! -d "node_modules" ]; then
     echo "📦 安装前端依赖..."
-    npm install
+    pnpm install
 fi
 
 # 启动前端服务
 echo "🚀 启动Vite开发服务器..."
-npm run dev &
+pnpm run dev &
 FRONTEND_PID=$!
 
 # 等待前端启动
