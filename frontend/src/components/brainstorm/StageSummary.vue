@@ -20,36 +20,171 @@
       <div class="summary-content" v-if="summary">
         <!-- 关键要点 -->
         <div class="summary-section" v-if="summary.keyPoints?.length">
-          <h4 class="section-title">
-            <BulbOutlined />
-            关键要点
-          </h4>
-          <ul class="key-points-list">
+          <div class="section-header">
+            <h4 class="section-title">
+              <BulbOutlined />
+              关键要点
+            </h4>
+            <div class="section-actions">
+              <a-button 
+                v-if="!editingStates.keyPoints"
+                type="text" 
+                size="small"
+                @click="startEditing('keyPoints')"
+              >
+                <EditOutlined />
+                编辑
+              </a-button>
+              <a-space v-else size="small">
+                <a-button 
+                  type="text" 
+                  size="small"
+                  @click="saveEditing('keyPoints')"
+                >
+                  <CheckOutlined />
+                  保存
+                </a-button>
+                <a-button 
+                  type="text" 
+                  size="small"
+                  @click="cancelEditing('keyPoints')"
+                >
+                  <CloseOutlined />
+                  取消
+                </a-button>
+              </a-space>
+            </div>
+          </div>
+          
+          <!-- 显示模式 -->
+          <ul v-if="!editingStates.keyPoints" class="key-points-list">
             <li 
-              v-for="(point, index) in summary.keyPoints" 
+              v-for="(point, index) in editableData.keyPoints" 
               :key="index"
               class="key-point-item"
             >
               {{ point }}
+              <span v-if="isModified('keyPoints')" class="modified-indicator">
+                <EditOutlined />
+                已修改
+              </span>
             </li>
           </ul>
+          
+          <!-- 编辑模式 -->
+          <div v-else class="editing-container">
+            <div 
+              v-for="(point, index) in editingData.keyPoints" 
+              :key="index"
+              class="edit-item"
+            >
+              <a-input 
+                v-model:value="editingData.keyPoints[index]"
+                placeholder="输入关键要点"
+                class="edit-input"
+              />
+              <a-button 
+                type="text" 
+                danger 
+                size="small"
+                @click="removeEditItem('keyPoints', index)"
+              >
+                <DeleteOutlined />
+              </a-button>
+            </div>
+            <a-button 
+              type="dashed" 
+              block 
+              @click="addEditItem('keyPoints')"
+            >
+              <PlusOutlined />
+              添加要点
+            </a-button>
+          </div>
         </div>
 
         <!-- 共同建议 -->
         <div class="summary-section" v-if="summary.commonSuggestions?.length">
-          <h4 class="section-title">
-            <CheckCircleOutlined />
-            共同建议
-          </h4>
-          <div class="suggestions-grid">
+          <div class="section-header">
+            <h4 class="section-title">
+              <CheckCircleOutlined />
+              共同建议
+            </h4>
+            <div class="section-actions">
+              <a-button 
+                v-if="!editingStates.commonSuggestions"
+                type="text" 
+                size="small"
+                @click="startEditing('commonSuggestions')"
+              >
+                <EditOutlined />
+                编辑
+              </a-button>
+              <a-space v-else size="small">
+                <a-button 
+                  type="text" 
+                  size="small"
+                  @click="saveEditing('commonSuggestions')"
+                >
+                  <CheckOutlined />
+                  保存
+                </a-button>
+                <a-button 
+                  type="text" 
+                  size="small"
+                  @click="cancelEditing('commonSuggestions')"
+                >
+                  <CloseOutlined />
+                  取消
+                </a-button>
+              </a-space>
+            </div>
+          </div>
+          
+          <!-- 显示模式 -->
+          <div v-if="!editingStates.commonSuggestions" class="suggestions-grid">
             <a-tag 
-              v-for="(suggestion, index) in summary.commonSuggestions"
+              v-for="(suggestion, index) in editableData.commonSuggestions"
               :key="index"
               color="green"
               class="suggestion-tag"
             >
               {{ suggestion }}
+              <span v-if="isModified('commonSuggestions')" class="modified-indicator">
+                <EditOutlined />
+              </span>
             </a-tag>
+          </div>
+          
+          <!-- 编辑模式 -->
+          <div v-else class="editing-container">
+            <div 
+              v-for="(suggestion, index) in editingData.commonSuggestions" 
+              :key="index"
+              class="edit-item"
+            >
+              <a-input 
+                v-model:value="editingData.commonSuggestions[index]"
+                placeholder="输入建议内容"
+                class="edit-input"
+              />
+              <a-button 
+                type="text" 
+                danger 
+                size="small"
+                @click="removeEditItem('commonSuggestions', index)"
+              >
+                <DeleteOutlined />
+              </a-button>
+            </div>
+            <a-button 
+              type="dashed" 
+              block 
+              @click="addEditItem('commonSuggestions')"
+            >
+              <PlusOutlined />
+              添加建议
+            </a-button>
           </div>
         </div>
 
@@ -105,33 +240,148 @@
 
         <!-- 整体评估 -->
         <div class="summary-section" v-if="summary.overallAssessment">
-          <h4 class="section-title">
-            <BarChartOutlined />
-            整体评估
-          </h4>
-          <div class="overall-assessment">
+          <div class="section-header">
+            <h4 class="section-title">
+              <BarChartOutlined />
+              整体评估
+            </h4>
+            <div class="section-actions">
+              <a-button 
+                v-if="!editingStates.overallAssessment"
+                type="text" 
+                size="small"
+                @click="startEditing('overallAssessment')"
+              >
+                <EditOutlined />
+                编辑
+              </a-button>
+              <a-space v-else size="small">
+                <a-button 
+                  type="text" 
+                  size="small"
+                  @click="saveEditing('overallAssessment')"
+                >
+                  <CheckOutlined />
+                  保存
+                </a-button>
+                <a-button 
+                  type="text" 
+                  size="small"
+                  @click="cancelEditing('overallAssessment')"
+                >
+                  <CloseOutlined />
+                  取消
+                </a-button>
+              </a-space>
+            </div>
+          </div>
+          
+          <!-- 显示模式 -->
+          <div v-if="!editingStates.overallAssessment" class="overall-assessment">
             <a-typography-paragraph>
-              {{ summary.overallAssessment }}
+              {{ editableData.overallAssessment }}
+              <span v-if="isModified('overallAssessment')" class="modified-indicator">
+                <EditOutlined />
+                已修改
+              </span>
             </a-typography-paragraph>
+          </div>
+          
+          <!-- 编辑模式 -->
+          <div v-else class="editing-container">
+            <a-textarea 
+              v-model:value="editingData.overallAssessment"
+              placeholder="输入整体评估内容"
+              :rows="4"
+              show-count
+              :maxlength="1000"
+            />
           </div>
         </div>
 
         <!-- 下一步建议 -->
         <div class="summary-section" v-if="summary.nextStepRecommendations?.length">
-          <h4 class="section-title">
-            <ArrowRightOutlined />
-            下一步建议
-          </h4>
-          <div class="next-steps">
+          <div class="section-header">
+            <h4 class="section-title">
+              <ArrowRightOutlined />
+              下一步建议
+            </h4>
+            <div class="section-actions">
+              <a-button 
+                v-if="!editingStates.nextStepRecommendations"
+                type="text" 
+                size="small"
+                @click="startEditing('nextStepRecommendations')"
+              >
+                <EditOutlined />
+                编辑
+              </a-button>
+              <a-space v-else size="small">
+                <a-button 
+                  type="text" 
+                  size="small"
+                  @click="saveEditing('nextStepRecommendations')"
+                >
+                  <CheckOutlined />
+                  保存
+                </a-button>
+                <a-button 
+                  type="text" 
+                  size="small"
+                  @click="cancelEditing('nextStepRecommendations')"
+                >
+                  <CloseOutlined />
+                  取消
+                </a-button>
+              </a-space>
+            </div>
+          </div>
+          
+          <!-- 显示模式 -->
+          <div v-if="!editingStates.nextStepRecommendations" class="next-steps">
             <a-timeline size="small">
               <a-timeline-item
-                v-for="(recommendation, index) in summary.nextStepRecommendations"
+                v-for="(recommendation, index) in editableData.nextStepRecommendations"
                 :key="index"
                 :color="getRecommendationColor(index)"
               >
                 {{ recommendation }}
+                <span v-if="isModified('nextStepRecommendations')" class="modified-indicator">
+                  <EditOutlined />
+                </span>
               </a-timeline-item>
             </a-timeline>
+          </div>
+          
+          <!-- 编辑模式 -->
+          <div v-else class="editing-container">
+            <div 
+              v-for="(recommendation, index) in editingData.nextStepRecommendations" 
+              :key="index"
+              class="edit-item"
+            >
+              <a-input 
+                v-model:value="editingData.nextStepRecommendations[index]"
+                placeholder="输入下一步建议"
+                class="edit-input"
+              />
+              <a-button 
+                type="text" 
+                danger 
+                size="small"
+                @click="removeEditItem('nextStepRecommendations', index)"
+              >
+                <DeleteOutlined />
+              </a-button>
+            </div>
+            <a-button 
+              type="dashed" 
+              block 
+              @click="addEditItem('nextStepRecommendations')"
+            >
+              <PlusOutlined />
+              添加建议
+            </a-button>
           </div>
         </div>
       </div>
@@ -238,7 +488,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { message } from 'ant-design-vue';
 import {
   BulbOutlined,
@@ -250,6 +500,11 @@ import {
   DownloadOutlined,
   EyeOutlined,
   FileTextOutlined,
+  EditOutlined,
+  CheckOutlined,
+  CloseOutlined,
+  DeleteOutlined,
+  PlusOutlined,
 } from '@ant-design/icons-vue';
 import type { AISummary, StageResult } from '@/types/brainstorm';
 import type { AgentResult } from '@/types/agent';
@@ -269,6 +524,7 @@ interface Emits {
   (e: 'generate-final-report'): void;
   (e: 'export-stage-results', results: AgentResult[]): void;
   (e: 'view-detailed-results', results: AgentResult[]): void;
+  (e: 'update-summary', updatedSummary: AISummary): void;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -284,6 +540,40 @@ const restarting = ref(false);
 const generatingReport = ref(false);
 const confirmVisible = ref(false);
 const confirmAction = ref<string>('');
+
+// 编辑相关状态
+const editingStates = ref<Record<string, boolean>>({
+  keyPoints: false,
+  commonSuggestions: false,
+  overallAssessment: false,
+  nextStepRecommendations: false,
+});
+
+const editableData = ref<AISummary>({
+  keyPoints: [],
+  commonSuggestions: [],
+  conflictingViews: [],
+  overallAssessment: '',
+  nextStepRecommendations: [],
+});
+
+const editingData = ref<AISummary>({
+  keyPoints: [],
+  commonSuggestions: [],
+  conflictingViews: [],
+  overallAssessment: '',
+  nextStepRecommendations: [],
+});
+
+const originalData = ref<AISummary>({
+  keyPoints: [],
+  commonSuggestions: [],
+  conflictingViews: [],
+  overallAssessment: '',
+  nextStepRecommendations: [],
+});
+
+const modifiedFields = ref<Set<string>>(new Set());
 
 // 确认对话框配置
 const confirmConfig = {
@@ -440,6 +730,105 @@ const handleExportStageResults = () => {
 const handleViewDetailedResults = () => {
   emit('view-detailed-results', props.agentResults);
 };
+
+// 编辑功能方法
+const initializeEditableData = () => {
+  editableData.value = {
+    keyPoints: [...(props.summary.keyPoints || [])],
+    commonSuggestions: [...(props.summary.commonSuggestions || [])],
+    conflictingViews: [...(props.summary.conflictingViews || [])],
+    overallAssessment: props.summary.overallAssessment || '',
+    nextStepRecommendations: [...(props.summary.nextStepRecommendations || [])],
+  };
+  
+  originalData.value = {
+    keyPoints: [...(props.summary.keyPoints || [])],
+    commonSuggestions: [...(props.summary.commonSuggestions || [])],
+    conflictingViews: [...(props.summary.conflictingViews || [])],
+    overallAssessment: props.summary.overallAssessment || '',
+    nextStepRecommendations: [...(props.summary.nextStepRecommendations || [])],
+  };
+};
+
+const startEditing = (field: string) => {
+  editingStates.value[field] = true;
+  
+  // 复制当前数据到编辑数据
+  if (field === 'overallAssessment') {
+    editingData.value[field] = editableData.value[field];
+  } else {
+    editingData.value[field as keyof AISummary] = [...(editableData.value[field as keyof AISummary] as any[])];
+  }
+};
+
+const saveEditing = (field: string) => {
+  // 保存编辑的数据
+  if (field === 'overallAssessment') {
+    editableData.value[field] = editingData.value[field];
+  } else {
+    editableData.value[field as keyof AISummary] = [...(editingData.value[field as keyof AISummary] as any[])];
+  }
+  
+  // 检查是否有修改
+  const isFieldModified = checkFieldModified(field);
+  if (isFieldModified) {
+    modifiedFields.value.add(field);
+  } else {
+    modifiedFields.value.delete(field);
+  }
+  
+  editingStates.value[field] = false;
+  
+  // 发送更新事件
+  emit('update-summary', editableData.value);
+  
+  message.success('修改已保存');
+};
+
+const cancelEditing = (field: string) => {
+  editingStates.value[field] = false;
+  
+  // 恢复编辑前的数据
+  if (field === 'overallAssessment') {
+    editingData.value[field] = editableData.value[field];
+  } else {
+    editingData.value[field as keyof AISummary] = [...(editableData.value[field as keyof AISummary] as any[])];
+  }
+};
+
+const addEditItem = (field: string) => {
+  if (field !== 'overallAssessment') {
+    (editingData.value[field as keyof AISummary] as any[]).push('');
+  }
+};
+
+const removeEditItem = (field: string, index: number) => {
+  if (field !== 'overallAssessment') {
+    (editingData.value[field as keyof AISummary] as any[]).splice(index, 1);
+  }
+};
+
+const checkFieldModified = (field: string): boolean => {
+  if (field === 'overallAssessment') {
+    return editableData.value[field] !== originalData.value[field];
+  } else {
+    const current = editableData.value[field as keyof AISummary] as any[];
+    const original = originalData.value[field as keyof AISummary] as any[];
+    
+    if (current.length !== original.length) return true;
+    
+    return current.some((item, index) => item !== original[index]);
+  }
+};
+
+const isModified = (field: string): boolean => {
+  return modifiedFields.value.has(field);
+};
+
+// 监听 props 变化，重新初始化数据
+watch(() => props.summary, () => {
+  initializeEditableData();
+}, { immediate: true });
 </script>
 
 <style scoped lang="scss">
@@ -452,17 +841,34 @@ const handleViewDetailedResults = () => {
       .summary-section {
         margin-bottom: 24px;
 
-        .section-title {
+        .section-header {
           display: flex;
-          align-items: center;
-          gap: 8px;
-          font-size: 16px;
-          font-weight: 600;
-          color: #262626;
+          justify-content: space-between;
+          align-items: flex-start;
           margin-bottom: 12px;
+          
+          .section-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            color: #262626;
+            margin: 0;
 
-          .anticon {
-            color: #1890ff;
+            .anticon {
+              color: #1890ff;
+            }
+          }
+          
+          .section-actions {
+            .ant-btn {
+              color: #1890ff;
+              
+              &:hover {
+                color: #40a9ff;
+              }
+            }
           }
         }
 
@@ -478,6 +884,9 @@ const handleViewDetailedResults = () => {
             margin-bottom: 8px;
             background: #f6ffed;
             border-radius: 0 4px 4px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
 
             &::before {
               content: '•';
@@ -485,6 +894,14 @@ const handleViewDetailedResults = () => {
               left: 8px;
               color: #1890ff;
               font-weight: bold;
+            }
+            
+            .modified-indicator {
+              font-size: 12px;
+              color: #fa8c16;
+              display: flex;
+              align-items: center;
+              gap: 4px;
             }
           }
         }
@@ -498,6 +915,13 @@ const handleViewDetailedResults = () => {
             margin: 0;
             padding: 4px 12px;
             border-radius: 16px;
+            position: relative;
+            
+            .modified-indicator {
+              font-size: 10px;
+              color: #fa8c16;
+              margin-left: 4px;
+            }
           }
         }
 
@@ -572,6 +996,28 @@ const handleViewDetailedResults = () => {
           padding: 16px;
           border-radius: 6px;
           border-left: 4px solid #52c41a;
+        }
+        
+        .editing-container {
+          .edit-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            
+            .edit-input {
+              flex: 1;
+            }
+          }
+        }
+        
+        .modified-indicator {
+          font-size: 12px;
+          color: #fa8c16;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          margin-left: 8px;
         }
       }
     }
@@ -676,6 +1122,28 @@ const handleViewDetailedResults = () => {
           .ant-btn {
             width: 100%;
           }
+        }
+      }
+    }
+    
+    .summary-content .summary-section {
+      .section-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+        
+        .section-actions {
+          align-self: flex-end;
+        }
+      }
+      
+      .editing-container .edit-item {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 4px;
+        
+        .edit-input {
+          width: 100%;
         }
       }
     }

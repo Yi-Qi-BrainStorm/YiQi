@@ -208,50 +208,20 @@
         
         <!-- 阶段总结 -->
         <div v-if="stageSummary && allAgentsCompleted" class="stage-summary">
-          <a-card title="阶段总结报告" class="summary-card">
-            <div class="summary-content">
-              <div class="summary-section">
-                <h4>关键观点汇总</h4>
-                <ul>
-                  <li v-for="point in stageSummary.keyPoints" :key="point">{{ point }}</li>
-                </ul>
-              </div>
-              
-              <div class="summary-section">
-                <h4>共同建议</h4>
-                <ul>
-                  <li v-for="suggestion in stageSummary.commonSuggestions" :key="suggestion">{{ suggestion }}</li>
-                </ul>
-              </div>
-              
-              <div v-if="stageSummary.conflictingViews.length > 0" class="summary-section">
-                <h4>分歧观点</h4>
-                <ul>
-                  <li v-for="conflict in stageSummary.conflictingViews" :key="conflict">{{ conflict }}</li>
-                </ul>
-              </div>
-              
-              <div class="summary-section">
-                <h4>整体评估</h4>
-                <p>{{ stageSummary.overallAssessment }}</p>
-              </div>
-            </div>
-            
-            <div class="summary-actions">
-              <a-space>
-                <a-button @click="retryCurrentStage" :loading="isRetrying">
-                  重新进行当前阶段
-                </a-button>
-                <a-button 
-                  type="primary" 
-                  @click="proceedToNextStage"
-                  :loading="isProceeding"
-                >
-                  {{ currentStage < 3 ? '进入下一阶段' : '生成最终报告' }}
-                </a-button>
-              </a-space>
-            </div>
-          </a-card>
+          <StageSummary
+            :summary="stageSummary"
+            :agent-results="getAgentResultsArray()"
+            :stage-name="getCurrentStageTitle()"
+            :stage-number="currentStage"
+            :is-last-stage="currentStage === 3"
+            :completed-at="new Date().toISOString()"
+            @proceed-to-next="proceedToNextStage"
+            @restart-stage="retryCurrentStage"
+            @generate-final-report="proceedToNextStage"
+            @update-summary="handleSummaryUpdate"
+            @export-stage-results="handleExportStageResults"
+            @view-detailed-results="handleViewDetailedResults"
+          />
         </div>
       </div>
 
@@ -324,6 +294,7 @@ import {
   PlusOutlined,
 } from '@ant-design/icons-vue';
 import { useAgents } from '@/composables/useAgents';
+import StageSummary from '@/components/brainstorm/StageSummary.vue';
 
 const router = useRouter();
 
@@ -783,6 +754,45 @@ const startNewSession = () => {
 const saveSettings = () => {
   message.success('设置已保存');
   showSettings.value = false;
+};
+
+// 新增的处理方法
+const getAgentResultsArray = () => {
+  return selectedAgents.value.map(agentId => {
+    const agent = availableAgents.value.find(a => a.id === agentId);
+    const result = agentResults.value[agentId];
+    
+    if (!agent || !result) return null;
+    
+    return {
+      agentId: agentId.toString(),
+      agentName: agent.name,
+      agentRole: agent.roleType,
+      content: result.analysis || '',
+      reasoning: result.mainPoint || '',
+      suggestions: result.suggestions || [],
+      confidence: 0.85, // 模拟置信度
+      processingTime: Math.random() * 5000 + 2000, // 模拟处理时间
+      createdAt: new Date().toISOString(),
+    };
+  }).filter(Boolean);
+};
+
+const handleSummaryUpdate = (updatedSummary: any) => {
+  stageSummary.value = updatedSummary;
+  message.success('阶段总结已更新');
+};
+
+const handleExportStageResults = (results: any[]) => {
+  message.info('正在导出阶段结果...');
+  // TODO: 实现导出功能
+  console.log('导出结果:', results);
+};
+
+const handleViewDetailedResults = (results: any[]) => {
+  message.info('查看详细结果功能开发中...');
+  // TODO: 实现详细结果查看
+  console.log('详细结果:', results);
 };
 
 // 生命周期
