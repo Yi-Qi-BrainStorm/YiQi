@@ -341,13 +341,12 @@ public class QiniuAIService {
      * 处理流式响应
      */
     private void processStreamingResponse(ResponseBody responseBody, StreamingResponseHandler responseHandler) throws IOException {
-        // 这里需要根据七牛云AI API的流式响应格式来解析数据
-        // 由于我们没有具体的API文档，这里只是一个示例实现
-        // 实际实现需要根据API的具体格式来调整
+        // 根据七牛云AI API的流式响应格式来解析数据
+        // 七牛云AI的流式响应格式是SSE（Server-Sent Events）格式
+        // 每行以"data: "开头，结束时发送"[DONE]"
         
         // 读取响应流
-        /*
-        BufferedReader reader = new BufferedReader(responseBody.charStream());
+        java.io.BufferedReader reader = new java.io.BufferedReader(responseBody.charStream());
         String line;
         while ((line = reader.readLine()) != null) {
             // 解析流式响应数据
@@ -363,12 +362,5 @@ public class QiniuAIService {
                 }
             }
         }
-        */
-        
-        // 由于我们没有具体的流式响应格式，这里暂时使用非流式的方式处理
-        // 实际实现需要根据API的具体格式来调整
-        String responseBodyString = responseBody.string();
-        responseHandler.onData(responseBodyString);
-        responseHandler.onComplete();
     }
 }
